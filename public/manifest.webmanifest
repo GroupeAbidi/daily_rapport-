@@ -2,12 +2,12 @@
   "name": "ABIDI — Rapport Journalier Minoterie",
   "short_name": "ABIDI Daily",
   "description": "Rapport journalier de la Minoterie Groupe ABIDI",
-  "start_url": "/",
+  "start_url": "/daily_rapport-/",
   "display": "standalone",
   "background_color": "#f5f1ea",
   "theme_color": "#241a17",
   "lang": "fr",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/daily_rapport-/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

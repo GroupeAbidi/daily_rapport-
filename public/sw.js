@@ -1,6 +1,7 @@
-const CACHE = 'abidi-minoterie-daily-v1';
+const CACHE = 'abidi-minoterie-daily-v2';
+const BASE = '/daily_rapport-/';
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/icon.svg'])));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([BASE, `${BASE}manifest.webmanifest`, `${BASE}icon.svg`])));
   self.skipWaiting();
 });
 self.addEventListener('activate', (event) => {
@@ -15,6 +16,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/'))),
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match(BASE))),
   );
 });
