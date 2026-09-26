@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+const cleanEnvValue = (value) => String(value || '')
+  .trim()
+  .replace(/^[A-Z0-9_]+\s*=\s*/, '')
+  .replace(/^['"]|['"]$/g, '')
+  .trim();
+
+const url = cleanEnvValue(import.meta.env.VITE_SUPABASE_URL);
+const anonKey = cleanEnvValue(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 export const cloudEnabled = Boolean(url && anonKey);
 export const supabase = cloudEnabled ? createClient(url, anonKey) : null;
