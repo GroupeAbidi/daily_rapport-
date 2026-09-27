@@ -255,9 +255,9 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
         <article className="panel insight-panel">
           <header className="panel-header"><div><span>Pilotage</span><h2>Indicateurs de performance</h2></div><Activity size={20}/></header>
           <div className="performance-list">
-            <PerformanceRow icon={Target} label="Rendement réception → production" value={productionCoverage} target={95}/>
-            <PerformanceRow icon={TrendingUp} label="Écoulement de la production" value={salesCoverage} target={80}/>
-            <PerformanceRow icon={Banknote} label="Recouvrement du chiffre d'affaires" value={s.recoveryRate} target={90}/>
+            <PerformanceRow icon={Target} label="Rendement réception → production" value={productionCoverage} target={95} numerator={s.productionQtx} denominator={s.wheatReceivedQtx} numeratorLabel="كمية الإنتاج" denominatorLabel="كمية القمح المستلم" unit="qtx" explanation="يوضح كمية الإنتاج المحققة مقابل القمح المستلم خلال اليوم."/>
+            <PerformanceRow icon={TrendingUp} label="Écoulement de la production" value={salesCoverage} target={80} numerator={s.salesQtx} denominator={s.productionQtx} numeratorLabel="الكمية المباعة" denominatorLabel="الكمية المنتجة" unit="qtx" explanation="يوضح نسبة الكمية المباعة مقارنة بإنتاج اليوم. تجاوز 100٪ يعني أن جزءًا من مخزون الأيام السابقة تم بيعه."/>
+            <PerformanceRow icon={Banknote} label="Recouvrement du chiffre d'affaires" value={s.recoveryRate} target={90} numerator={s.collectionsAmount} denominator={s.salesAmount} numeratorLabel="المبالغ المحصلة" denominatorLabel="قيمة المبيعات" unit="money" explanation="يوضح المبلغ المحصل فعليًا مقارنة بقيمة مبيعات اليوم."/>
           </div>
           <div className={`alert-box ${alerts.length ? 'warning' : 'success'}`}>
             {alerts.length ? <AlertTriangle size={18}/> : <CheckCircle2 size={18}/>} 
@@ -281,11 +281,16 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
   );
 }
 
-function PerformanceRow({ icon: Icon, label, value, target }) {
+function PerformanceRow({ icon: Icon, label, value, target, numerator, denominator, numeratorLabel, denominatorLabel, unit, explanation }) {
   const safeValue = Number.isFinite(value) ? value : 0;
   const progress = Math.min(100, Math.max(0, (safeValue / target) * 100));
   const tone = safeValue >= target ? 'good' : safeValue >= target * .75 ? 'medium' : 'low';
-  return <div className="performance-row"><span className={`performance-icon ${tone}`}><Icon size={17}/></span><div><span>{label}</span><div className="progress-track"><i className={tone} style={{ width: `${progress}%` }}/></div><small>Objectif {target}%</small></div><strong>{formatNumber(safeValue)}%</strong></div>;
+  const formattedNumerator = unit === 'money' ? formatMoney(numerator) : `${formatNumber(numerator)} qtx`;
+  const formattedDenominator = unit === 'money' ? formatMoney(denominator) : `${formatNumber(denominator)} qtx`;
+  return <details className="performance-item">
+    <summary className="performance-row"><span className={`performance-icon ${tone}`}><Icon size={17}/></span><div><span>{label}</span><div className="progress-track"><i className={tone} style={{ width: `${progress}%` }}/></div><small>Objectif {target}% · Cliquer pour comprendre</small></div><strong>{formatNumber(safeValue)}%</strong><ChevronRight className="performance-chevron" size={16}/></summary>
+    <div className="performance-explanation" dir="rtl"><strong>{explanation}</strong><div><span>{numeratorLabel}</span><b>{formattedNumerator}</b></div><div><span>{denominatorLabel}</span><b>{formattedDenominator}</b></div><code>({formattedNumerator} ÷ {formattedDenominator}) × 100 = {formatNumber(safeValue)}%</code></div>
+  </details>;
 }
 
 function HistoryCard({ reports, selected, onSelect }) {
