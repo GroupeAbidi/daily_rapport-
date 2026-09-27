@@ -26,10 +26,11 @@ export function StatusPill({ status }) {
 
 export function SummaryCards({ report, onOpen }) {
   const s = summarizeReport(report);
+  const pdfSales = report.sales?.some((row) => row.produit === 'CA PDF');
   const cards = [
     { key: 'production', icon: Factory, label: 'Production', value: `${formatNumber(s.productionQtx)} qtx`, note: `${report.production?.length || 0} lignes`, tone: 'red' },
     { key: 'wheat', icon: Wheat, label: 'Suivi Blé', value: `${formatNumber(s.wheatReceivedQtx)} qtx`, note: s.wheatShortageQtx ? `Manque ${formatNumber(s.wheatShortageQtx)} qtx` : 'Quota couvert', tone: 'gold' },
-    { key: 'sales', icon: PackageCheck, label: 'Ventes', value: formatMoney(s.salesAmount), note: `${formatNumber(s.salesQtx)} qtx`, tone: 'green' },
+    { key: 'sales', icon: PackageCheck, label: 'Ventes', value: formatMoney(s.salesAmount), note: pdfSales ? `${report.sales.length} livraisons · PDF` : `${formatNumber(s.salesQtx)} qtx`, tone: 'green' },
     { key: 'collections', icon: Banknote, label: 'Encaissements', value: formatMoney(s.collectionsAmount), note: `${formatNumber(s.recoveryRate)}% du CA du jour`, tone: 'ink' },
   ];
   return (

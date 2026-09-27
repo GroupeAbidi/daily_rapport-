@@ -9,6 +9,7 @@ import {
   Download,
   Factory,
   FileSpreadsheet,
+  FileText,
   History,
   Home,
   Info,
@@ -43,6 +44,7 @@ import {
 } from 'recharts';
 import { Brand, StatusPill, SummaryCards } from './components.jsx';
 import { parseValidatedFile, validateImportedReport } from './lib/importer.js';
+import { parseSalesPdf } from './lib/pdfSalesImporter.js';
 import { loadLocalReports, loadLocalSession, saveLocalReports, saveLocalSession } from './lib/localStore.js';
 import {
   cloudEnabled,
@@ -143,13 +145,14 @@ function Login({ busy, onLogin }) {
   );
 }
 
-function Header({ session, report, onLogout, onImport }) {
+function Header({ session, report, onLogout, onImport, onImportSales }) {
   const analyst = session.profile.role === 'ANALYST';
   return (
     <header className="app-header">
       <Brand compact />
       <div className="header-actions">
-        {analyst && <button className="header-import" onClick={onImport}><Upload size={17} /><span>Importer</span></button>}
+        {analyst && <button className="header-import ca-import" onClick={onImportSales}><FileText size={17} /><span>CA PDF</span></button>}
+        {analyst && <button className="header-import" onClick={onImport}><Upload size={17} /><span>Rapport Excel</span></button>}
         <div className="user-chip">
           <div><strong>{session.profile.full_name}</strong><small>{analyst ? 'Analyste' : 'Manager'}</small></div>
           <span>{session.profile.full_name?.charAt(0) || 'A'}</span>
@@ -203,6 +206,7 @@ function Hero({ report, role, onImport }) {
 
 function HomeView({ report, setView, reports, onSelectReport, role, onImport }) {
   const s = summarizeReport(report);
+  const pdfSales = report.sales?.some((row) => row.produit === 'CA PDF');
   const trendData = useMemo(() => reports
     .filter((item) => item.status === 'PUBLISHED')
     .slice(0, 7)
@@ -256,7 +260,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
           <header className="panel-header"><div><span>Pilotage</span><h2>Indicateurs de performance</h2></div><Activity size={20}/></header>
           <div className="performance-list">
             <PerformanceRow icon={Target} label="Rendement réception → production" value={productionCoverage} target={95} numerator={s.productionQtx} denominator={s.wheatReceivedQtx} numeratorLabel="كمية الإنتاج" denominatorLabel="كمية القمح المستلم" unit="qtx" explanation="يوضح كمية الإنتاج المحققة مقابل القمح المستلم خلال اليوم."/>
-            <PerformanceRow icon={TrendingUp} label="Écoulement de la production" value={salesCoverage} target={80} numerator={s.salesQtx} denominator={s.productionQtx} numeratorLabel="الكمية المباعة" denominatorLabel="الكمية المنتجة" unit="qtx" explanation="يوضح نسبة الكمية المباعة مقارنة بإنتاج اليوم. تجاوز 100٪ يعني أن جزءًا من مخزون الأيام السابقة تم بيعه."/>
+            <PerformanceRow icon={TrendingUp} label="Écoulement de la production" value={pdfSales ? NaN : salesCoverage} target={80} numerator={s.salesQtx} denominator={s.productionQtx} numeratorLabel="الكمية المباعة" denominatorLabel="الكمية المنتجة" unit="qtx" explanation={pdfSales ? "غير متاح: ملف PDF يحتوي على رقم الأعمال والفواتير، لكنه لا يحتوي على الكميات المباعة." : "يوضح نسبة الكمية المباعة مقارنة بإنتاج اليوم. تجاوز 100٪ يعني أن جزءًا من مخزون الأيام السابقة تم بيعه."}/>
             <PerformanceRow icon={Banknote} label="Recouvrement du chiffre d'affaires" value={s.recoveryRate} target={90} numerator={s.collectionsAmount} denominator={s.salesAmount} numeratorLabel="المبالغ المحصلة" denominatorLabel="قيمة المبيعات" unit="money" explanation="يوضح المبلغ المحصل فعليًا مقارنة بقيمة مبيعات اليوم."/>
           </div>
           <div className={`alert-box ${alerts.length ? 'warning' : 'success'}`}>
@@ -271,7 +275,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
           <div className="decision-list">
             <div><span>Production</span><strong>{formatNumber(s.productionQtx)} qtx</strong><small>Produit fini déclaré</small></div>
             <div><span>Blé reçu</span><strong>{formatNumber(s.wheatReceivedQtx)} qtx</strong><small>sur {formatNumber(s.quotaQtx)} qtx de quota</small></div>
-            <div><span>Ventes</span><strong>{formatMoney(s.salesAmount)}</strong><small>{formatNumber(s.salesQtx)} qtx vendus</small></div>
+            <div><span>Ventes</span><strong>{formatMoney(s.salesAmount)}</strong><small>{pdfSales ? `${report.sales.length} livraisons PDF` : `${formatNumber(s.salesQtx)} qtx vendus`}</small></div>
             <div><span>Encaissements</span><strong>{formatMoney(s.collectionsAmount)}</strong><small>{formatNumber(s.recoveryRate)}% du chiffre du jour</small></div>
           </div>
         </article>
@@ -282,14 +286,15 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
 }
 
 function PerformanceRow({ icon: Icon, label, value, target, numerator, denominator, numeratorLabel, denominatorLabel, unit, explanation }) {
-  const safeValue = Number.isFinite(value) ? value : 0;
+  const available = Number.isFinite(value);
+  const safeValue = available ? value : 0;
   const progress = Math.min(100, Math.max(0, (safeValue / target) * 100));
   const tone = safeValue >= target ? 'good' : safeValue >= target * .75 ? 'medium' : 'low';
   const formattedNumerator = unit === 'money' ? formatMoney(numerator) : `${formatNumber(numerator)} qtx`;
   const formattedDenominator = unit === 'money' ? formatMoney(denominator) : `${formatNumber(denominator)} qtx`;
   return <details className="performance-item">
-    <summary className="performance-row"><span className={`performance-icon ${tone}`}><Icon size={17}/></span><div><span>{label}</span><div className="progress-track"><i className={tone} style={{ width: `${progress}%` }}/></div><small>Objectif {target}% · Cliquer pour comprendre</small></div><strong>{formatNumber(safeValue)}%</strong><ChevronRight className="performance-chevron" size={16}/></summary>
-    <div className="performance-explanation" dir="rtl"><strong>{explanation}</strong><div><span>{numeratorLabel}</span><b>{formattedNumerator}</b></div><div><span>{denominatorLabel}</span><b>{formattedDenominator}</b></div><code>({formattedNumerator} ÷ {formattedDenominator}) × 100 = {formatNumber(safeValue)}%</code></div>
+    <summary className="performance-row"><span className={`performance-icon ${tone}`}><Icon size={17}/></span><div><span>{label}</span><div className="progress-track"><i className={tone} style={{ width: `${progress}%` }}/></div><small>{available ? `Objectif ${target}%` : 'Quantités absentes du PDF'} · Cliquer pour comprendre</small></div><strong>{available ? `${formatNumber(safeValue)}%` : 'N/D'}</strong><ChevronRight className="performance-chevron" size={16}/></summary>
+    <div className="performance-explanation" dir="rtl"><strong>{explanation}</strong>{available && <><div><span>{numeratorLabel}</span><b>{formattedNumerator}</b></div><div><span>{denominatorLabel}</span><b>{formattedDenominator}</b></div><code>({formattedNumerator} ÷ {formattedDenominator}) × 100 = {formatNumber(safeValue)}%</code></>}</div>
   </details>;
 }
 
@@ -358,17 +363,20 @@ function WheatView({ report, onBack }) {
 
 function SalesView({ report, onBack }) {
   const s = summarizeReport(report);
+  const pdfMode = report.sales?.some((row) => row.produit === 'CA PDF');
   const clients = groupBy(report.sales || [], 'client', 'montant_da').slice(0, 8);
-  const products = groupBy(report.sales || [], 'produit', 'quantite_qtx');
+  const products = pdfMode
+    ? [...new Map(report.sales.map((row) => [row.client, 0])).keys()].map((name) => ({ name, value: report.sales.filter((row) => row.client === name).length })).sort((a, b) => b.value - a.value).slice(0, 8)
+    : groupBy(report.sales || [], 'produit', 'quantite_qtx');
   return (
     <>
-      <SectionTitle icon={PackageCheck} kicker="Ventes" title="Ventes du jour" note="Quantités vendues, chiffre d'affaires et principaux clients." onBack={onBack} />
-      <div className="section-kpis"><MiniKpi label="Quantité vendue" value={`${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(report.sales.map((r) => r.client)).size} /></div>
+      <SectionTitle icon={PackageCheck} kicker="Ventes" title="Ventes du jour" note={pdfMode ? "Chiffre d'affaires HT issu du PDF des livraisons clients." : "Quantités vendues, chiffre d'affaires et principaux clients."} onBack={onBack} />
+      <div className="section-kpis"><MiniKpi label={pdfMode ? 'Livraisons / factures' : 'Quantité vendue'} value={pdfMode ? report.sales.length : `${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires HT" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(report.sales.map((r) => r.client)).size} /></div>
       <section className="two-grid">
         <ChartPanel title="CA par client" note="DA"><ResponsiveContainer width="100%" height={300}><BarChart data={clients} layout="vertical" margin={{ left: 12, right: 18 }}><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="CA" fill="#3f6f68" radius={[0,7,7,0]}/></BarChart></ResponsiveContainer></ChartPanel>
-        <ChartPanel title="Quantité par produit" note="qtx"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
+        <ChartPanel title={pdfMode ? 'Nombre de livraisons par client' : 'Quantité par produit'} note={pdfMode ? 'factures' : 'qtx'}><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable columns={[['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={report.sales} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} />
+      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={report.sales} numberKeys={pdfMode ? [] : ['quantite_qtx']} moneyKeys={['montant_da']} />
     </>
   );
 }
@@ -445,16 +453,16 @@ function ImportModal({ onClose, onPublish, publishing }) {
         <header><div><span>Analyste</span><h2>Importer le rapport journalier validé</h2></div><button className="icon-button" onClick={onClose}><X size={20}/></button></header>
         {!draft ? (
           <div className="drop-zone" onClick={() => inputRef.current?.click()}>
-            {reading ? <RefreshCw className="spin" size={36}/> : <FileSpreadsheet size={40}/>}<strong>{reading ? 'Lecture du fichier…' : 'Choisir le fichier validé'}</strong><span>Excel .xlsx / .xls ou JSON</span><small>Feuilles attendues : Production, Suivi Ble, Ventes, Encaissements</small>
+            {reading ? <RefreshCw className="spin" size={36}/> : <FileSpreadsheet size={40}/>}<strong>{reading ? 'Lecture du fichier…' : 'Choisir le fichier validé'}</strong><span>Excel .xlsx / .xls ou JSON</span><small>Production, suivi blé et encaissements. Le CA ventes est importé séparément depuis le PDF.</small>
             <button className="primary"><Upload size={17}/> Parcourir</button>
           </div>
         ) : (
           <>
             <div className="import-file"><FileSpreadsheet size={22}/><div><strong>{draft.source_file}</strong><small>Rapport détecté : {formatDate(draft.report_date)}</small></div><button onClick={() => setDraft(null)}>Changer</button></div>
             {draft.historical_reports?.length > 1 && <div className="import-days"><CalendarDays size={18}/><span><strong>{draft.historical_reports.length} journées détectées</strong><small>Du {formatDate(draft.historical_reports[0].report_date)} au {formatDate(draft.report_date)}. Elles seront toutes ajoutées.</small></span></div>}
-            <div className="preview-grid"><MiniKpi label="Production" value={`${formatNumber(summary.productionQtx)} qtx`}/><MiniKpi label="Blé reçu" value={`${formatNumber(summary.wheatReceivedQtx)} qtx`}/><MiniKpi label="Ventes" value={formatMoney(summary.salesAmount)}/><MiniKpi label="Encaissements" value={formatMoney(summary.collectionsAmount)}/></div>
+            <div className="preview-grid"><MiniKpi label="Production" value={`${formatNumber(summary.productionQtx)} qtx`}/><MiniKpi label="Blé reçu" value={`${formatNumber(summary.wheatReceivedQtx)} qtx`}/><MiniKpi label="CA ventes" value="Import PDF séparé"/><MiniKpi label="Encaissements" value={formatMoney(summary.collectionsAmount)}/></div>
             <label className="note-field">Observation analyste<textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Observation ou information importante pour le manager…" rows={4}/></label>
-            {errors.length ? <div className="validation-errors"><strong>À corriger avant publication :</strong>{errors.map((error) => <span key={error}>• {error}</span>)}</div> : <div className="validation-ok"><CheckCircle2 size={18}/><span>Les 4 sections sont présentes. Le rapport peut être publié.</span></div>}
+            {errors.length ? <div className="validation-errors"><strong>À corriger avant publication :</strong>{errors.map((error) => <span key={error}>• {error}</span>)}</div> : <div className="validation-ok"><CheckCircle2 size={18}/><span>Les données opérationnelles sont présentes. Importez ensuite le PDF CA ventes.</span></div>}
             <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={publish} disabled={publishing || errors.length}>{publishing ? <><RefreshCw size={17} className="spin"/> Publication…</> : <><CheckCircle2 size={17}/> Valider & publier</>}</button></div>
           </>
         )}
@@ -464,6 +472,46 @@ function ImportModal({ onClose, onPublish, publishing }) {
   );
 }
 
+function SalesPdfModal({ onClose, onPublish, publishing }) {
+  const inputRef = useRef();
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState('');
+  const [reading, setReading] = useState(false);
+
+  const readFile = async (file) => {
+    if (!file) return;
+    setReading(true);
+    setError('');
+    try {
+      setParsed(await parseSalesPdf(file));
+    } catch (err) {
+      setParsed(null);
+      setError(err.message || 'Impossible de lire ce PDF.');
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const total = parsed?.transactions.reduce((sum, row) => sum + Number(row.montant_da || 0), 0) || 0;
+  const dayCount = parsed ? Object.keys(parsed.salesByDate).length : 0;
+  const clientCount = parsed ? new Set(parsed.transactions.map((row) => row.client)).size : 0;
+
+  return <div className="modal-backdrop"><section className="import-modal" role="dialog" aria-modal="true">
+    <header><div><span>CA Ventes</span><h2>Importer les ventes depuis le PDF</h2></div><button className="icon-button" onClick={onClose}><X size={20}/></button></header>
+    {!parsed ? <div className="drop-zone" onClick={() => inputRef.current?.click()}>
+      {reading ? <RefreshCw className="spin" size={36}/> : <FileText size={40}/>}<strong>{reading ? 'Analyse des 24 pages…' : 'Choisir le PDF des livraisons clients'}</strong><span>Format attendu : Liste des Livraisons par Client</span><small>Le PDF remplacera uniquement le chiffre d'affaires et les clients. Production, blé et encaissements resteront inchangés.</small><button className="primary"><Upload size={17}/> Parcourir</button>
+    </div> : <>
+      <div className="import-file"><FileText size={22}/><div><strong>{parsed.source_file}</strong><small>{parsed.pages} pages · du {formatDate(parsed.periodStart)} au {formatDate(parsed.periodEnd)}</small></div><button onClick={() => setParsed(null)}>Changer</button></div>
+      <div className="preview-grid"><MiniKpi label="CA total PDF" value={formatMoney(total)}/><MiniKpi label="Journées" value={dayCount}/><MiniKpi label="Livraisons" value={parsed.transactions.length}/><MiniKpi label="Clients" value={clientCount}/></div>
+      <div className="validation-ok"><CheckCircle2 size={18}/><span>Les montants HT, dates, références et clients ont été détectés. Les anciennes ventes des mêmes dates seront remplacées.</span></div>
+      <div className="pdf-preview"><strong>Aperçu des dernières livraisons</strong>{parsed.transactions.slice(-5).reverse().map((row, index) => <div key={`${row.reference}-${index}`}><span>{formatDate(row.date)} · {row.client}</span><b>{formatMoney(row.montant_da)}</b></div>)}</div>
+      <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={() => onPublish(parsed)} disabled={publishing}>{publishing ? <><RefreshCw size={17} className="spin"/> Importation…</> : <><CheckCircle2 size={17}/> Remplacer le CA ventes</>}</button></div>
+    </>}
+    {error && <div className="validation-errors">{error}</div>}
+    <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => readFile(event.target.files?.[0])}/>
+  </section></div>;
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [reports, setReports] = useState([]);
@@ -471,6 +519,7 @@ function App() {
   const [view, setView] = useState('home');
   const [busy, setBusy] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
+  const [salesPdfOpen, setSalesPdfOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -527,7 +576,11 @@ function App() {
     setPublishing(true);
     try {
       let published;
-      const importedReports = draft.historical_reports?.length ? draft.historical_reports : [draft];
+      const sourceReports = draft.historical_reports?.length ? draft.historical_reports : [draft];
+      const importedReports = sourceReports.map((item) => {
+        const existing = keepLatestReportPerDay(reports).find((row) => row.report_date === item.report_date);
+        return !item.sales?.length && existing?.sales?.length ? { ...item, sales: existing.sales } : item;
+      });
       if (cloudEnabled) {
         for (const item of importedReports) {
           published = await cloudPublishReport({ ...item, note: item.report_date === draft.report_date ? draft.note : item.note }, session.user.id);
@@ -558,6 +611,54 @@ function App() {
     }
   };
 
+  const publishSalesPdf = async (pdfData) => {
+    setPublishing(true);
+    try {
+      const latestExisting = keepLatestReportPerDay(reports);
+      const mergedReports = Object.entries(pdfData.salesByDate).map(([date, sales]) => {
+        const existing = latestExisting.find((item) => item.report_date === date);
+        return {
+          ...(existing || {
+            report_date: date,
+            production: [],
+            wheat: [],
+            collections: [],
+            note: `CA ventes importé depuis ${pdfData.source_file}.`,
+          }),
+          report_date: date,
+          sales,
+          source_file: pdfData.source_file,
+        };
+      }).sort((a, b) => a.report_date.localeCompare(b.report_date));
+
+      let published;
+      if (cloudEnabled) {
+        for (const item of mergedReports) published = await cloudPublishReport(item, session.user.id);
+        await refreshReports();
+      } else {
+        const importedDates = new Set(mergedReports.map((item) => item.report_date));
+        const created = mergedReports.map((item, index) => {
+          const previousVersions = reports.filter((row) => row.report_date === item.report_date).map((row) => Number(row.version || 0));
+          const version = Math.max(0, ...previousVersions) + 1;
+          return { ...item, id: `local-ca-${item.report_date}-${Date.now()}-${index}`, version, status: 'PUBLISHED', published_at: new Date().toISOString(), created_at: new Date().toISOString() };
+        });
+        const next = [...created, ...reports.filter((item) => !importedDates.has(item.report_date))]
+          .sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
+        saveLocalReports(next);
+        setReports(next);
+        published = created.at(-1);
+      }
+      setSelectedId(published?.id || null);
+      setView('home');
+      setSalesPdfOpen(false);
+      notify(`CA ventes PDF importé : ${pdfData.transactions.length} livraisons sur ${mergedReports.length} journées.`, 'success');
+    } catch (err) {
+      notify(err.message || 'Importation du CA PDF impossible.', 'error');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   if (busy && !session) return <div className="loading-screen"><RefreshCw size={28} className="spin"/><span>Chargement…</span></div>;
   if (!session) return <><Login busy={busy} onLogin={login}/><Toast toast={toast} onClose={() => setToast(null)}/></>;
 
@@ -566,13 +667,13 @@ function App() {
   const selected = visibleReports.find((item) => item.id === selectedId) || visibleReports[0];
 
   if (!selected) {
-    return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
+    return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} {salesPdfOpen && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
   }
 
   const setReport = (report) => { setSelectedId(report.id); setView('home'); };
   return (
     <div className="app-shell">
-      <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} />
+      <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} />
       <main className="app-main" key={`${view}-${selected.id}`}>
         {view === 'home' && <HomeView report={selected} setView={setView} reports={visibleReports} onSelectReport={setReport} role={session.profile.role} onImport={() => setImportOpen(true)} />}
         {view === 'production' && <ProductionView report={selected} onBack={() => setView('home')} />}
@@ -582,6 +683,7 @@ function App() {
       </main>
       <BottomNav view={view} setView={setView} />
       {importOpen && session.profile.role === 'ANALYST' && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} 
+      {salesPdfOpen && session.profile.role === 'ANALYST' && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>} 
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

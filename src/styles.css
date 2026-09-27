@@ -70,6 +70,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .icon-button { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 11px; color: #655a53; background: white; }
 .header-import { min-height: 39px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border: 0; border-radius: 11px; color: white; background: var(--red); font-size: 10px; font-weight: 900; }
+.header-import.ca-import { color: #684d09; background: #f3d77f; }
 .user-chip { display: flex; align-items: center; gap: 9px; }
 .user-chip > div { text-align: right; }
 .user-chip strong, .user-chip small { display: block; }
@@ -231,6 +232,11 @@ td { color: #4b423d; }
 .import-days small { margin-top: 3px; font-size: 9px; }
 .preview-grid .mini-kpi { padding: 12px; }
 .preview-grid .mini-kpi strong { font-size: 13px; }
+.pdf-preview { display: grid; gap: 1px; margin-top: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--line); }
+.pdf-preview > strong { padding: 11px 12px; color: #766960; background: #f8f4ef; font-size: 9px; text-transform: uppercase; }
+.pdf-preview > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; background: white; font-size: 9px; }
+.pdf-preview > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdf-preview > div b { flex: 0 0 auto; color: var(--green); }
 .note-field { margin-top: 12px; color: #5f554f; }
 .note-field textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 12px; outline: none; background: white; }
 .note-field textarea:focus { border-color: #c49a3c; }
@@ -258,7 +264,8 @@ td { color: #4b423d; }
 @media (max-width: 560px) {
   .app-shell { padding-bottom: 85px; }
   .app-header { min-height: 62px; padding: 9px 12px; }
-  .header-import { display: none; }
+  .header-import { width: 39px; display: grid; place-items: center; padding: 0; }
+  .header-import span { display: none; }
   .header-report-state { display: flex; }
   .app-main { width: min(100% - 20px,1280px); padding-top: 12px; }
   .hero-panel { padding: 22px 18px 74px; border-radius: 20px; }

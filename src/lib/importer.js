@@ -850,7 +850,8 @@ export async function parseValidatedFile(
     report.status = 'DRAFT';
     report.production = parseProduction(productionRows, date);
     report.wheat = parseWheat(deliveryRows, date);
-    report.sales = sales;
+    // CA/Ventes is imported separately from the accounting PDF.
+    report.sales = [];
     report.collections = collections;
     report.note = `Import automatique du rapport Minoterie du ${formatDateForTitle(date)}.`;
     return report;
@@ -888,12 +889,6 @@ export function validateImportedReport(
   if (!report.wheat?.length) {
     errors.push(
       'Aucune donnée Suivi Blé détectée pour cette date.',
-    );
-  }
-
-  if (!report.sales?.length) {
-    errors.push(
-      'Aucune donnée Ventes détectée pour cette date.',
     );
   }
 
