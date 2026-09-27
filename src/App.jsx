@@ -67,6 +67,15 @@ const DEMO_ACCOUNTS = {
   manager: { email: 'manager@abidi.demo', password: 'demo1234', full_name: 'Manager ABIDI', role: 'MANAGER' },
 };
 
+const keepLatestReportPerDay = (items) => {
+  const latest = new Map();
+  items.forEach((item) => {
+    const current = latest.get(item.report_date);
+    if (!current || Number(item.version || 0) > Number(current.version || 0)) latest.set(item.report_date, item);
+  });
+  return [...latest.values()].sort((a, b) => `${b.report_date}-${b.version || 0}`.localeCompare(`${a.report_date}-${a.version || 0}`));
+};
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -527,7 +536,9 @@ function App() {
           return { ...cleanItem, note: item.report_date === draft.report_date ? draft.note : item.note, id: `local-${item.report_date}-v${version}-${Date.now()}-${index}`, version, status: 'PUBLISHED', published_at: new Date().toISOString(), created_at: new Date().toISOString() };
         });
         published = created.at(-1);
-        const next = [...created, ...reports].sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
+        const importedDates = new Set(created.map((item) => item.report_date));
+        const next = [...created, ...reports.filter((item) => !importedDates.has(item.report_date))]
+          .sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
         saveLocalReports(next);
         setReports(next);
       }
@@ -545,7 +556,8 @@ function App() {
   if (busy && !session) return <div className="loading-screen"><RefreshCw size={28} className="spin"/><span>Chargement…</span></div>;
   if (!session) return <><Login busy={busy} onLogin={login}/><Toast toast={toast} onClose={() => setToast(null)}/></>;
 
-  const visibleReports = session.profile.role === 'MANAGER' ? reports.filter((r) => r.status === 'PUBLISHED') : reports;
+  const roleReports = session.profile.role === 'MANAGER' ? reports.filter((r) => r.status === 'PUBLISHED') : reports;
+  const visibleReports = keepLatestReportPerDay(roleReports);
   const selected = visibleReports.find((item) => item.id === selectedId) || visibleReports[0];
 
   if (!selected) {

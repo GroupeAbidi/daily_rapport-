@@ -67,6 +67,11 @@ export async function cloudPublishReport(report, userId) {
     .limit(1);
   if (versionError) throw versionError;
   const version = (versions?.[0]?.version || 0) + 1;
+  const { error: deleteError } = await supabase
+    .from('daily_reports')
+    .delete()
+    .eq('report_date', report.report_date);
+  if (deleteError) throw deleteError;
   const payload = {
     report_date: report.report_date,
     version,
