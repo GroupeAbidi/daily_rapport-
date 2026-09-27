@@ -376,9 +376,9 @@ const parseProduction = (
 | D = MINOTERIE
 |
 | Right:
-| I = DATE
-| J = GROUPE
-| K = MINOTERIE
+| H = DATE
+| I = GROUPE
+| J = MINOTERIE
 |
 */
 
@@ -414,17 +414,17 @@ const parseWheat = (
        */
 
       if (
-        excelDate(row[8]) ===
+        excelDate(row[7]) ===
         reportDate
       ) {
         matches.push({
           rowIndex,
 
           livre_groupe_qtx:
-            number(row[9]),
+            number(row[8]),
 
           livre_minoterie_qtx:
-            number(row[10]),
+            number(row[9]),
         });
       }
     },
