@@ -177,6 +177,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .mini-kpi.red strong { color: #a14838; }
 .chart-panel { margin-bottom: 0; }
 .chart-wrap { padding: 11px 8px 5px; }
+.chart-wrap .recharts-cartesian-axis-tick-value { font-weight: 600; }
 .chart-tooltip { max-width: 230px; display: grid; gap: 4px; padding: 10px 11px; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; color: #403832; background: rgba(255,253,249,.96); box-shadow: 0 9px 25px rgba(0,0,0,.09); font-size: 9px; }
 .chart-tooltip strong { font-size: 10px; }
 .table-panel { margin-top: 14px; overflow: hidden; }
