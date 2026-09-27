@@ -26,12 +26,13 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .brand { display: flex; align-items: center; gap: 13px; color: #fff; }
-.brand-mark { width: 54px; height: 54px; display: grid; place-items: center; border: 1px solid rgba(201,151,21,.7); border-radius: 17px; color: #fffaf0; background: linear-gradient(145deg,#321d18,#722f24); box-shadow: 0 10px 30px rgba(0,0,0,.28); font-size: 29px; font-weight: 900; }
+.brand-mark { width: 66px; height: 66px; display: grid; place-items: center; flex: 0 0 auto; overflow: hidden; border: 1px solid rgba(201,151,21,.35); border-radius: 18px; background: rgba(255,255,255,.96); box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.brand-mark img { width: 92%; height: 92%; display: block; object-fit: contain; }
 .brand span, .brand strong { display: block; }
 .brand span { color: #c9bdb3; font-size: 9px; font-weight: 900; letter-spacing: .13em; }
 .brand strong { margin-top: 4px; font-size: 14px; }
 .brand.compact { color: var(--ink); }
-.brand.compact .brand-mark { width: 42px; height: 42px; border-radius: 13px; font-size: 21px; }
+.brand.compact .brand-mark { width: 50px; height: 50px; border-radius: 14px; }
 .brand.compact span { color: #8a7d74; }
 .brand.compact strong { font-size: 12px; }
 

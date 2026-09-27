@@ -10,7 +10,7 @@ import { formatMoney, formatNumber, summarizeReport } from './lib/report.js';
 export function Brand({ compact = false }) {
   return (
     <div className={`brand ${compact ? 'compact' : ''}`}>
-      <div className="brand-mark">A</div>
+      <div className="brand-mark"><img src={`${import.meta.env.BASE_URL}abidi-logo.png`} alt="Groupe ABIDI" /></div>
       <div>
         <span>GROUPE ABIDI</span>
         <strong>Minoterie · Rapport Journalier</strong>

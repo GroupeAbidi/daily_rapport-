@@ -1,7 +1,7 @@
 const CACHE = 'abidi-minoterie-daily-v2';
 const BASE = '/daily_rapport-/';
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([BASE, `${BASE}manifest.webmanifest`, `${BASE}icon.svg`])));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([BASE, `${BASE}manifest.webmanifest`, `${BASE}abidi-logo.png`])));
   self.skipWaiting();
 });
 self.addEventListener('activate', (event) => {
