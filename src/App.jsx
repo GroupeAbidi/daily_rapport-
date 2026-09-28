@@ -451,7 +451,68 @@ function SalesView({ report, onBack }) {
   );
 }
 
-function CollectionsView({ report, onBack }) {
+const buildClientRecovery = (reports, clientName) => {
+  const key = normalizeClient(clientName);
+  const ordered = [...reports].sort((a, b) => a.report_date.localeCompare(b.report_date));
+  const balances = ordered.flatMap((report) => (report.collections || [])
+    .filter((row) => row.source === 'BALANCE_CLIENT' && normalizeClient(row.client) === key)
+    .map((row) => ({ ...row, date: row.date || report.report_date })));
+  const invoices = ordered.flatMap((report) => (report.sales || [])
+    .filter((row) => row.source !== 'EXCEL_QTY' && Number(row.montant_da || 0) > 0 && normalizeClient(row.client) === key)
+    .map((row) => ({ date: row.date || report.report_date, reference: row.reference || 'Sans référence', montant_da: Number(row.montant_da || 0) })));
+  const firstBalance = balances[0];
+  const debts = firstBalance && Number(firstBalance.solde_anterieur || 0) > 0
+    ? [{ date: firstBalance.date, reference: 'Solde antérieur', montant_da: Number(firstBalance.solde_anterieur), paid: 0 }]
+    : [];
+  invoices.forEach((invoice) => debts.push({ ...invoice, paid: 0 }));
+  debts.sort((a, b) => a.date.localeCompare(b.date));
+
+  let unapplied = 0;
+  balances.forEach((payment) => {
+    let available = Math.max(0, Number(payment.montant_da || 0));
+    debts.filter((debt) => debt.date <= payment.date).forEach((debt) => {
+      const remaining = debt.montant_da - debt.paid;
+      const applied = Math.min(available, Math.max(0, remaining));
+      debt.paid += applied;
+      available -= applied;
+    });
+    unapplied += available;
+  });
+  debts.forEach((debt) => {
+    debt.remaining = Math.max(0, debt.montant_da - debt.paid);
+    debt.status = debt.remaining <= 0.01 ? 'Encaissée' : debt.paid > 0 ? 'Partiellement encaissée' : 'Non encaissée';
+  });
+  return { balances, debts, latest: balances.at(-1), unapplied };
+};
+
+function ClientRecoveryPanel({ reports }) {
+  const balanceRows = reports.flatMap((report) => (report.collections || []).filter((row) => row.source === 'BALANCE_CLIENT'));
+  const clients = [...new Map(balanceRows.map((row) => [normalizeClient(row.client), row.client])).entries()]
+    .map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name));
+  const [query, setQuery] = useState('');
+  const selected = query.trim() ? clients.find((client) => client.key.includes(normalizeClient(query))) : clients[0];
+  const recovery = selected ? buildClientRecovery(reports, selected.name) : null;
+  const latest = recovery?.latest;
+  const balance = Number(latest?.solde || 0);
+  const accountStatus = balance <= 0 ? 'Soldé / crédit client' : Number(latest?.montant_da || 0) > 0 ? 'Paiement enregistré' : 'Solde à recouvrer';
+
+  if (!clients.length) return null;
+  return <article className="panel recovery-panel">
+    <header className="panel-header"><div><span>Suivi clients</span><h2>Recouvrement des ventes antérieures</h2></div><small>FIFO estimatif</small></header>
+    <div className="recovery-search">
+      <label><Search size={17}/><input list="recovery-clients" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un client…"/></label>
+      <datalist id="recovery-clients">{clients.map((client) => <option key={client.key} value={client.name}/>)}</datalist>
+      <small>Sans référence de règlement, les paiements sont affectés automatiquement aux dettes les plus anciennes.</small>
+    </div>
+    {selected && <>
+      <div className="preview-grid recovery-kpis"><MiniKpi label="Client" value={selected.name}/><MiniKpi label="Paiement importé" value={formatMoney(latest?.montant_da || 0)}/><MiniKpi label="Solde actuel" value={formatMoney(balance)} tone={balance > 0 ? 'red' : 'green'}/><MiniKpi label="Situation" value={accountStatus}/></div>
+      <DataTable columns={[['date','Date vente'],['reference','Facture / origine'],['montant_da','Montant HT'],['paid','Affecté'],['remaining','Reste'],['status','État']]} rows={recovery.debts} moneyKeys={['montant_da','paid','remaining']} />
+      {recovery.unapplied > 0.01 && <div className="validation-ok"><CheckCircle2 size={18}/><span>{formatMoney(recovery.unapplied)} de paiement reste non affecté aux factures disponibles.</span></div>}
+    </>}
+  </article>;
+}
+
+function CollectionsView({ report, reports, onBack }) {
   const s = summarizeReport(report);
   const balanceRows = (report.collections || []).filter((row) => row.source === 'BALANCE_CLIENT');
   const paymentRows = (report.collections || []).filter((row) => Number(row.montant_da || 0) !== 0);
@@ -467,6 +528,7 @@ function CollectionsView({ report, onBack }) {
       </section>
       <DataTable columns={[['date','Date'],['client','Client'],['montant_da','Montant'],['mode_paiement','Mode paiement'],['reference','Référence']]} rows={paymentRows} moneyKeys={['montant_da']} />
       {balanceRows.length > 0 && <DataTable columns={[['client_code','Code'],['client','Client'],['solde_anterieur','Solde antérieur'],['chiffre_affaire',"Chiffre d'affaires"],['montant_da','Paiement'],['solde','Nouveau solde']]} rows={balanceRows} moneyKeys={['solde_anterieur','chiffre_affaire','montant_da','solde']} />}
+      <ClientRecoveryPanel reports={reports} />
     </>
   );
 }
@@ -860,7 +922,7 @@ function App() {
         {view === 'production' && <ProductionView report={selected} onBack={() => setView('home')} />}
         {view === 'wheat' && <WheatView report={selected} onBack={() => setView('home')} />}
         {view === 'sales' && <SalesView report={selected} onBack={() => setView('home')} />}
-        {view === 'collections' && <CollectionsView report={selected} onBack={() => setView('home')} />}
+        {view === 'collections' && <CollectionsView report={selected} reports={visibleReports} onBack={() => setView('home')} />}
       </main>
       <BottomNav view={view} setView={setView} />
       {importOpen && session.profile.role === 'ANALYST' && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} 
