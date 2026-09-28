@@ -71,6 +71,9 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .icon-button { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 11px; color: #655a53; background: white; }
 .header-import { min-height: 39px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border: 0; border-radius: 11px; color: white; background: var(--red); font-size: 10px; font-weight: 900; }
 .header-import.ca-import { color: #684d09; background: #f3d77f; }
+.header-import.balance-import { color: white; background: #3f6f68; }
+.danger-button { color: #9f2f24; border-color: #e8c7c1; background: #fff4f2; }
+.danger-button:hover { color: white; background: #9f2f24; }
 .user-chip { display: flex; align-items: center; gap: 9px; }
 .user-chip > div { text-align: right; }
 .user-chip strong, .user-chip small { display: block; }

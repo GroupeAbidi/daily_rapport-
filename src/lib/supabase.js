@@ -89,3 +89,8 @@ export async function cloudPublishReport(report, userId) {
   if (error) throw error;
   return mapDbReport(data);
 }
+
+export async function cloudClearReports() {
+  const { error } = await supabase.from('daily_reports').delete().not('id', 'is', null);
+  if (error) throw error;
+}

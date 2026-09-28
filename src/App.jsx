@@ -17,6 +17,8 @@ import {
   Activity,
   AlertTriangle,
   Target,
+  Scale,
+  Trash2,
   TrendingUp,
   LogOut,
   PackageCheck,
@@ -45,11 +47,13 @@ import {
 import { Brand, StatusPill, SummaryCards } from './components.jsx';
 import { parseValidatedFile, validateImportedReport } from './lib/importer.js';
 import { parseSalesPdf } from './lib/pdfSalesImporter.js';
+import { parseClientBalance } from './lib/balanceImporter.js';
 import { loadLocalReports, loadLocalSession, saveLocalReports, saveLocalSession } from './lib/localStore.js';
 import {
   cloudEnabled,
   cloudLoadReports,
   cloudLoadSession,
+  cloudClearReports,
   cloudPublishReport,
   cloudSignIn,
   cloudSignOut,
@@ -162,19 +166,21 @@ function Login({ busy, onLogin }) {
   );
 }
 
-function Header({ session, report, onLogout, onImport, onImportSales }) {
+function Header({ session, report, onLogout, onImport, onImportSales, onImportBalance, onClear }) {
   const analyst = session.profile.role === 'ANALYST';
   return (
     <header className="app-header">
       <Brand compact />
       <div className="header-actions">
         {analyst && <button className="header-import ca-import" onClick={onImportSales}><FileText size={17} /><span>CA PDF</span></button>}
+        {analyst && <button className="header-import balance-import" onClick={onImportBalance}><Scale size={17} /><span>Balance clients</span></button>}
         {analyst && <button className="header-import" onClick={onImport}><Upload size={17} /><span>Rapport Excel</span></button>}
         <div className="user-chip">
           <div><strong>{session.profile.full_name}</strong><small>{analyst ? 'Analyste' : 'Manager'}</small></div>
           <span>{session.profile.full_name?.charAt(0) || 'A'}</span>
         </div>
         <button className="icon-button" onClick={onLogout} aria-label="Déconnexion"><LogOut size={18} /></button>
+        {analyst && <button className="icon-button danger-button" onClick={onClear} aria-label="Effacer toutes les données" title="Effacer toutes les données"><Trash2 size={17}/></button>}
       </div>
       {report && <div className="header-report-state"><StatusPill status={report.status} /><span>{formatDate(report.report_date)}</span></div>}
     </header>
@@ -401,17 +407,20 @@ function SalesView({ report, onBack }) {
 
 function CollectionsView({ report, onBack }) {
   const s = summarizeReport(report);
-  const clients = groupBy(report.collections || [], 'client', 'montant_da').slice(0, 10);
-  const modes = groupBy(report.collections || [], 'mode_paiement', 'montant_da');
+  const balanceRows = (report.collections || []).filter((row) => row.source === 'BALANCE_CLIENT');
+  const paymentRows = (report.collections || []).filter((row) => Number(row.montant_da || 0) !== 0);
+  const clients = groupBy(paymentRows, 'client', 'montant_da').slice(0, 10);
+  const modes = groupBy(paymentRows, 'mode_paiement', 'montant_da');
   return (
     <>
       <SectionTitle icon={Banknote} kicker="Encaissements clients" title="Encaissements du jour" note="Montants réellement encaissés, par client et par mode de paiement." onBack={onBack} />
-      <div className="section-kpis"><MiniKpi label="Total encaissé" value={formatMoney(s.collectionsAmount)} tone="green" /><MiniKpi label="Taux recouvrement" value={`${formatNumber(s.recoveryRate)}%`} /><MiniKpi label="Clients encaissés" value={new Set(report.collections.map((r) => r.client)).size} /></div>
+      <div className="section-kpis"><MiniKpi label="Total encaissé" value={formatMoney(s.collectionsAmount)} tone="green" /><MiniKpi label="Taux recouvrement" value={`${formatNumber(s.recoveryRate)}%`} /><MiniKpi label="Clients encaissés" value={new Set(paymentRows.map((r) => r.client)).size} /></div>
       <section className="two-grid">
         <ChartPanel title="Encaissement par client" note="DA"><ResponsiveContainer width="100%" height={Math.max(380, clients.length * 46)}><BarChart data={clients} layout="vertical" margin={{ left: 8, right: 22, top: 8, bottom: 8 }} barCategoryGap="28%"><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={165} axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 10, fill: '#625b57' }}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="Encaissé" fill="#c99715" radius={[0,7,7,0]} maxBarSize={25}/></BarChart></ResponsiveContainer></ChartPanel>
         <ChartPanel title="Modes de paiement" note="répartition"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={modes} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90}>{modes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip money/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable columns={[['date','Date'],['client','Client'],['montant_da','Montant'],['mode_paiement','Mode paiement'],['reference','Référence']]} rows={report.collections} moneyKeys={['montant_da']} />
+      <DataTable columns={[['date','Date'],['client','Client'],['montant_da','Montant'],['mode_paiement','Mode paiement'],['reference','Référence']]} rows={paymentRows} moneyKeys={['montant_da']} />
+      {balanceRows.length > 0 && <DataTable columns={[['client_code','Code'],['client','Client'],['solde_anterieur','Solde antérieur'],['chiffre_affaire',"Chiffre d'affaires"],['montant_da','Paiement'],['solde','Nouveau solde']]} rows={balanceRows} moneyKeys={['solde_anterieur','chiffre_affaire','montant_da','solde']} />}
     </>
   );
 }
@@ -530,6 +539,42 @@ function SalesPdfModal({ onClose, onPublish, publishing }) {
   </section></div>;
 }
 
+function BalanceImportModal({ onClose, onPublish, publishing }) {
+  const inputRef = useRef();
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState('');
+  const [reading, setReading] = useState(false);
+
+  const readFile = async (file) => {
+    if (!file) return;
+    setReading(true);
+    setError('');
+    try {
+      setParsed(await parseClientBalance(file));
+    } catch (err) {
+      setParsed(null);
+      setError(err.message || 'Impossible de lire cette balance clients.');
+    } finally {
+      setReading(false);
+    }
+  };
+
+  return <div className="modal-backdrop"><section className="import-modal" role="dialog" aria-modal="true">
+    <header><div><span>Balance clients</span><h2>Importer les paiements et soldes clients</h2></div><button className="icon-button" onClick={onClose}><X size={20}/></button></header>
+    {!parsed ? <div className="drop-zone" onClick={() => inputRef.current?.click()}>
+      {reading ? <RefreshCw className="spin" size={36}/> : <Scale size={40}/>}<strong>{reading ? 'Lecture de la balance…' : 'Choisir la balance clients'}</strong><span>Excel .xls ou .xlsx</span><small>Colonnes attendues : Code, Nom, Solde antérieur, Chiffre Affaire, Paiement et Solde.</small><button className="primary"><Upload size={17}/> Parcourir</button>
+    </div> : <>
+      <div className="import-file"><Scale size={22}/><div><strong>{parsed.source_file}</strong><small>Du {formatDate(parsed.periodStart)} au {formatDate(parsed.periodEnd)} · {parsed.clients.length} clients</small></div><button onClick={() => setParsed(null)}>Changer</button></div>
+      <div className="preview-grid"><MiniKpi label="Solde antérieur" value={formatMoney(parsed.totals.opening)}/><MiniKpi label="Chiffre d'affaires" value={formatMoney(parsed.totals.sales)}/><MiniKpi label="Paiements" value={formatMoney(parsed.totals.payments)}/><MiniKpi label="Nouveau solde" value={formatMoney(parsed.totals.closing)}/></div>
+      {!parsed.isDaily && <div className="validation-errors"><strong>Balance de période détectée</strong><span>Elle sera enregistrée comme une seule situation au {formatDate(parsed.periodEnd)}. Pour connaître les encaissements jour par jour, exportez une balance avec « Du » et « Au » sur la même date.</span></div>}
+      {parsed.isDaily && <div className="validation-ok"><CheckCircle2 size={18}/><span>Balance journalière détectée. Les encaissements et soldes clients du {formatDate(parsed.periodEnd)} remplaceront ceux déjà enregistrés ce jour.</span></div>}
+      <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={() => onPublish(parsed)} disabled={publishing}>{publishing ? <><RefreshCw size={17} className="spin"/> Importation…</> : <><CheckCircle2 size={17}/> Importer la balance</>}</button></div>
+    </>}
+    {error && <div className="validation-errors">{error}</div>}
+    <input ref={inputRef} type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(event) => readFile(event.target.files?.[0])}/>
+  </section></div>;
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [reports, setReports] = useState([]);
@@ -538,6 +583,7 @@ function App() {
   const [busy, setBusy] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
   const [salesPdfOpen, setSalesPdfOpen] = useState(false);
+  const [balanceOpen, setBalanceOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -678,6 +724,71 @@ function App() {
     }
   };
 
+  const publishClientBalance = async (balance) => {
+    setPublishing(true);
+    try {
+      const date = balance.periodEnd;
+      const existing = keepLatestReportPerDay(reports).find((item) => item.report_date === date);
+      const merged = {
+        ...(existing || { report_date: date, production: [], wheat: [], sales: [], note: '' }),
+        report_date: date,
+        source_file: balance.source_file,
+        collections: balance.clients.map((row) => ({
+          date,
+          client_code: row.client_code,
+          client: row.client,
+          montant_da: row.paiement,
+          mode_paiement: 'Balance client',
+          reference: balance.source_file,
+          solde_anterieur: row.solde_anterieur,
+          chiffre_affaire: row.chiffre_affaire,
+          solde: row.solde,
+          pourcentage: row.pourcentage,
+          source: 'BALANCE_CLIENT',
+        })),
+      };
+
+      let published;
+      if (cloudEnabled) {
+        published = await cloudPublishReport(merged, session.user.id);
+        await refreshReports();
+      } else {
+        const previousVersions = reports.filter((row) => row.report_date === date).map((row) => Number(row.version || 0));
+        const version = Math.max(0, ...previousVersions) + 1;
+        published = { ...merged, id: `local-balance-${date}-${Date.now()}`, version, status: 'PUBLISHED', published_at: new Date().toISOString(), created_at: new Date().toISOString() };
+        const next = [published, ...reports.filter((item) => item.report_date !== date)]
+          .sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
+        saveLocalReports(next);
+        setReports(next);
+      }
+      setSelectedId(published.id);
+      setView('collections');
+      setBalanceOpen(false);
+      notify(`Balance clients du ${formatDate(date)} importée : ${formatMoney(balance.totals.payments)} encaissés.`, 'success');
+    } catch (err) {
+      notify(err.message || 'Importation de la balance clients impossible.', 'error');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const clearAllData = async () => {
+    if (!window.confirm('Effacer définitivement tous les rapports et toutes les données importées ?')) return;
+    setPublishing(true);
+    try {
+      if (cloudEnabled) await cloudClearReports();
+      else saveLocalReports([]);
+      setReports([]);
+      setSelectedId(null);
+      setView('home');
+      notify('Toutes les données ont été effacées. Vous pouvez importer les nouveaux fichiers.', 'success');
+    } catch (err) {
+      notify(err.message || 'Suppression des données impossible.', 'error');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   if (busy && !session) return <div className="loading-screen"><RefreshCw size={28} className="spin"/><span>Chargement…</span></div>;
   if (!session) return <><Login busy={busy} onLogin={login}/><Toast toast={toast} onClose={() => setToast(null)}/></>;
 
@@ -686,13 +797,13 @@ function App() {
   const selected = visibleReports.find((item) => item.id === selectedId) || visibleReports[0];
 
   if (!selected) {
-    return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} {salesPdfOpen && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
+    return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onClear={clearAllData}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} {salesPdfOpen && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>} {balanceOpen && <BalanceImportModal onClose={() => setBalanceOpen(false)} onPublish={publishClientBalance} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
   }
 
   const setReport = (report) => { setSelectedId(report.id); setView('home'); };
   return (
     <div className="app-shell">
-      <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} />
+      <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onClear={clearAllData} />
       <main className="app-main" key={`${view}-${selected.id}`}>
         {view === 'home' && <HomeView report={selected} setView={setView} reports={visibleReports} onSelectReport={setReport} role={session.profile.role} onImport={() => setImportOpen(true)} />}
         {view === 'production' && <ProductionView report={selected} onBack={() => setView('home')} />}
@@ -703,6 +814,7 @@ function App() {
       <BottomNav view={view} setView={setView} />
       {importOpen && session.profile.role === 'ANALYST' && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} 
       {salesPdfOpen && session.profile.role === 'ANALYST' && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>} 
+      {balanceOpen && session.profile.role === 'ANALYST' && <BalanceImportModal onClose={() => setBalanceOpen(false)} onPublish={publishClientBalance} publishing={publishing}/>}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
