@@ -8,6 +8,8 @@ import {
   Cloud,
   Download,
   Factory,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   FileText,
   History,
@@ -543,14 +545,17 @@ function ChartPanel({ title, note, children }) {
 
 function DataTable({ columns, rows, numberKeys = [], moneyKeys = [], searchKey = '', searchPlaceholder = '' }) {
   const [query, setQuery] = useState('');
+  const [hidden, setHidden] = useState(false);
   const visibleRows = searchKey && query.trim()
     ? rows.filter((row) => normalizeClient(row[searchKey]).includes(normalizeClient(query)))
     : rows;
   return (
     <article className="panel table-panel">
-      <header className="panel-header"><div><span>Détail</span><h2>Données du rapport</h2></div><small>{visibleRows.length}{query.trim() ? ` / ${rows.length}` : ''} lignes</small></header>
-      {searchKey && <label className="table-search"><Search size={17}/><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder || 'Rechercher…'} aria-label={searchPlaceholder || 'Rechercher'}/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche"><X size={15}/></button>}</label>}
-      <div className="table-scroll"><table><thead><tr>{columns.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead><tbody>{visibleRows.length ? visibleRows.map((row, index) => <tr key={index}>{columns.map(([key]) => <td key={key}>{moneyKeys.includes(key) ? formatMoney(row[key]) : numberKeys.includes(key) ? formatNumber(row[key]) : key === 'date' ? formatDate(row[key]) : row[key] || '—'}</td>)}</tr>) : <tr><td colSpan={columns.length}>Aucun client trouvé.</td></tr>}</tbody></table></div>
+      <header className="panel-header table-panel-header"><div><span>Détail</span><h2>Données du rapport</h2></div><div className="table-header-actions"><small>{visibleRows.length}{query.trim() ? ` / ${rows.length}` : ''} lignes</small><button type="button" onClick={() => setHidden((value) => !value)} aria-expanded={!hidden}>{hidden ? <Eye size={15}/> : <EyeOff size={15}/>}<span>{hidden ? 'Afficher' : 'Masquer'}</span></button></div></header>
+      {!hidden && <>
+        {searchKey && <label className="table-search"><Search size={17}/><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder || 'Rechercher…'} aria-label={searchPlaceholder || 'Rechercher'}/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche"><X size={15}/></button>}</label>}
+        <div className="table-scroll"><table><thead><tr>{columns.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead><tbody>{visibleRows.length ? visibleRows.map((row, index) => <tr key={index}>{columns.map(([key]) => <td key={key}>{moneyKeys.includes(key) ? formatMoney(row[key]) : numberKeys.includes(key) ? formatNumber(row[key]) : key === 'date' ? formatDate(row[key]) : row[key] || '—'}</td>)}</tr>) : <tr><td colSpan={columns.length}>Aucune donnée trouvée.</td></tr>}</tbody></table></div>
+      </>}
     </article>
   );
 }

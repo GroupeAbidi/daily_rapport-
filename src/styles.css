@@ -197,6 +197,11 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .chart-tooltip { max-width: 230px; display: grid; gap: 4px; padding: 10px 11px; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; color: #403832; background: rgba(255,253,249,.96); box-shadow: 0 9px 25px rgba(0,0,0,.09); font-size: 9px; }
 .chart-tooltip strong { font-size: 10px; }
 .table-panel { margin-top: 14px; overflow: hidden; }
+.table-header-actions { display: flex; align-items: center; gap: 10px; }
+.table-header-actions > small { color: #978a81; font-size: 9px; white-space: nowrap; }
+.table-header-actions button { min-height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #dfd5cb; border-radius: 9px; color: #6e625a; background: white; font-size: 9px; font-weight: 800; }
+.table-header-actions button:hover { border-color: var(--gold); color: var(--red); }
+.table-header-actions button span { color: inherit; font-size: inherit; letter-spacing: 0; text-transform: none; }
 .table-search { width: min(380px, calc(100% - 28px)); min-height: 40px; display: flex; align-items: center; gap: 9px; margin: 12px 14px; padding: 0 12px; border: 1px solid #dfd5cb; border-radius: 11px; color: #8b7c72; background: #fff; }
 .table-search:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,151,21,.12); }
 .table-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: #403832; background: transparent; font: inherit; }
