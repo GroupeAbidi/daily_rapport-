@@ -573,6 +573,8 @@ const parseSalesAndCollections = (
 
   const sales = [];
   const collections = [];
+  let currentClient = '';
+  let currentBonNumber = '';
 
   /*
    * Data starts after:
@@ -593,13 +595,16 @@ const parseSalesAndCollections = (
     const row =
       rows[i] || [];
 
-    const client =
-      String(
-        row[1] ?? '',
-      ).trim();
+    const rowClient = String(row[1] ?? '').trim();
+    const rowBonNumber = String(row[0] ?? '').trim();
 
-    const bonNumber =
-      row[0] ?? '';
+    // Excel merged cells only expose their value on the first row. Keep that
+    // value for the following product rows belonging to the same client.
+    if (rowClient) currentClient = rowClient;
+    if (rowBonNumber) currentBonNumber = rowBonNumber;
+
+    const client = currentClient;
+    const bonNumber = currentBonNumber;
 
     /*
     |--------------------------------------------------------------------------
