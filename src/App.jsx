@@ -307,7 +307,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
           {reports.filter((item) => item.status === 'PUBLISHED').map((item) => <option key={item.id} value={item.id}>{formatDate(item.report_date)} · v{item.version || 1}</option>)}
         </select>
       </div>
-      <SummaryCards report={report} onOpen={setView} />
+      <SummaryCards report={report} reports={reports} onOpen={setView} />
       <section className="analysis-grid">
         <ChartPanel title="Production et ventes sur 7 rapports" note="qtx">
           <ResponsiveContainer width="100%" height={270}>
