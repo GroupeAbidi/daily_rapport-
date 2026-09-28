@@ -197,6 +197,10 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .chart-tooltip { max-width: 230px; display: grid; gap: 4px; padding: 10px 11px; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; color: #403832; background: rgba(255,253,249,.96); box-shadow: 0 9px 25px rgba(0,0,0,.09); font-size: 9px; }
 .chart-tooltip strong { font-size: 10px; }
 .table-panel { margin-top: 14px; overflow: hidden; }
+.table-search { width: min(380px, calc(100% - 28px)); min-height: 40px; display: flex; align-items: center; gap: 9px; margin: 12px 14px; padding: 0 12px; border: 1px solid #dfd5cb; border-radius: 11px; color: #8b7c72; background: #fff; }
+.table-search:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,151,21,.12); }
+.table-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: #403832; background: transparent; font: inherit; }
+.table-search button { width: 27px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #8b7c72; background: #f4eee8; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 10px; }
 th, td { padding: 12px 14px; border-bottom: 1px solid #eee7df; text-align: left; white-space: nowrap; }

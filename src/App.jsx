@@ -23,6 +23,7 @@ import {
   LogOut,
   PackageCheck,
   RefreshCw,
+  Search,
   ShieldCheck,
   Upload,
   UserRound,
@@ -445,7 +446,7 @@ function SalesView({ report, onBack }) {
         <ChartPanel title="CA par client" note="DA"><ResponsiveContainer width="100%" height={300}><BarChart data={clients} layout="vertical" margin={{ left: 12, right: 18 }}><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="CA" fill="#3f6f68" radius={[0,7,7,0]}/></BarChart></ResponsiveContainer></ChartPanel>
         <ChartPanel title="Quantité par produit" note="qtx"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={displayRows} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} />
+      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={displayRows} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} searchKey="client" searchPlaceholder="Rechercher un client…" />
     </>
   );
 }
@@ -478,11 +479,16 @@ function ChartPanel({ title, note, children }) {
   return <article className="panel chart-panel"><header className="panel-header"><div><span>Analyse</span><h2>{title}</h2></div><small>{note}</small></header><div className="chart-wrap">{children}</div></article>;
 }
 
-function DataTable({ columns, rows, numberKeys = [], moneyKeys = [] }) {
+function DataTable({ columns, rows, numberKeys = [], moneyKeys = [], searchKey = '', searchPlaceholder = '' }) {
+  const [query, setQuery] = useState('');
+  const visibleRows = searchKey && query.trim()
+    ? rows.filter((row) => normalizeClient(row[searchKey]).includes(normalizeClient(query)))
+    : rows;
   return (
     <article className="panel table-panel">
-      <header className="panel-header"><div><span>Détail</span><h2>Données du rapport</h2></div><small>{rows.length} lignes</small></header>
-      <div className="table-scroll"><table><thead><tr>{columns.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, index) => <tr key={index}>{columns.map(([key]) => <td key={key}>{moneyKeys.includes(key) ? formatMoney(row[key]) : numberKeys.includes(key) ? formatNumber(row[key]) : key === 'date' ? formatDate(row[key]) : row[key] || '—'}</td>)}</tr>) : <tr><td colSpan={columns.length}>Aucune donnée.</td></tr>}</tbody></table></div>
+      <header className="panel-header"><div><span>Détail</span><h2>Données du rapport</h2></div><small>{visibleRows.length}{query.trim() ? ` / ${rows.length}` : ''} lignes</small></header>
+      {searchKey && <label className="table-search"><Search size={17}/><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder || 'Rechercher…'} aria-label={searchPlaceholder || 'Rechercher'}/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche"><X size={15}/></button>}</label>}
+      <div className="table-scroll"><table><thead><tr>{columns.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead><tbody>{visibleRows.length ? visibleRows.map((row, index) => <tr key={index}>{columns.map(([key]) => <td key={key}>{moneyKeys.includes(key) ? formatMoney(row[key]) : numberKeys.includes(key) ? formatNumber(row[key]) : key === 'date' ? formatDate(row[key]) : row[key] || '—'}</td>)}</tr>) : <tr><td colSpan={columns.length}>Aucun client trouvé.</td></tr>}</tbody></table></div>
     </article>
   );
 }
