@@ -82,6 +82,57 @@ const keepLatestReportPerDay = (items) => {
   return [...latest.values()].sort((a, b) => `${b.report_date}-${b.version || 0}`.localeCompare(`${a.report_date}-${a.version || 0}`));
 };
 
+const normalizeClient = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+const normalizeReference = (value) => {
+  const reference = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  return /^\d+$/.test(reference) ? String(Number(reference)) : reference;
+};
+
+const salesMatchKey = (row) => {
+  const reference = normalizeReference(row.reference);
+  return reference ? `${row.date}|REF|${reference}` : `${row.date}|CLIENT|${normalizeClient(row.client)}`;
+};
+
+const aggregateSalesRows = (rows, kind) => {
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const key = salesMatchKey(row);
+    const current = grouped.get(key) || { ...row, quantite_qtx: 0, montant_da: 0, products: [] };
+    current.quantite_qtx += Number(row.quantite_qtx || 0);
+    current.montant_da += Number(row.montant_da || 0);
+    if (kind === 'excel' && row.produit && !current.products.includes(row.produit)) current.products.push(row.produit);
+    grouped.set(key, current);
+  });
+  return grouped;
+};
+
+const salesDisplayRows = (sales = []) => {
+  const excelGroups = aggregateSalesRows(sales.filter((row) => row.source === 'EXCEL_QTY'), 'excel');
+  const pdfGroups = aggregateSalesRows(sales.filter((row) => row.source !== 'EXCEL_QTY'), 'pdf');
+  const usedExcelKeys = new Set();
+  const rows = [];
+
+  pdfGroups.forEach((pdfRow, pdfKey) => {
+    let excelKey = excelGroups.has(pdfKey) ? pdfKey : '';
+    if (!excelKey) {
+      excelKey = [...excelGroups.entries()].find(([key, row]) => !usedExcelKeys.has(key) && row.date === pdfRow.date && normalizeClient(row.client) === normalizeClient(pdfRow.client))?.[0] || '';
+    }
+    const excelRow = excelKey ? excelGroups.get(excelKey) : null;
+    if (excelKey) usedExcelKeys.add(excelKey);
+    rows.push({
+      ...pdfRow,
+      produit: excelRow?.products.join(' + ') || pdfRow.produit,
+      quantite_qtx: excelRow?.quantite_qtx || 0,
+      montant_da: pdfRow.montant_da,
+    });
+  });
+
+  excelGroups.forEach((excelRow, key) => {
+    if (!usedExcelKeys.has(key)) rows.push({ ...excelRow, produit: excelRow.products.join(' + '), montant_da: 0 });
+  });
+  return rows.sort((a, b) => String(a.reference || '').localeCompare(String(b.reference || ''), undefined, { numeric: true }));
+};
+
 const combinePdfCaWithExcelQuantities = (caRows = [], quantityRows = []) => {
   const pdfSales = caRows
     .filter((row) => row.source !== 'EXCEL_QTY')
@@ -383,17 +434,18 @@ function WheatView({ report, onBack }) {
 function SalesView({ report, onBack }) {
   const s = summarizeReport(report);
   const pdfMode = report.sales?.some((row) => row.source?.includes('PDF') || row.produit === 'CA PDF');
+  const displayRows = pdfMode ? salesDisplayRows(report.sales || []) : report.sales;
   const clients = groupBy(report.sales || [], 'client', 'montant_da').slice(0, 8);
   const products = groupBy(report.sales || [], 'produit', 'quantite_qtx');
   return (
     <>
       <SectionTitle icon={PackageCheck} kicker="Ventes" title="Ventes du jour" note={pdfMode ? "Chiffre d'affaires HT issu du PDF des livraisons clients." : "Quantités vendues, chiffre d'affaires et principaux clients."} onBack={onBack} />
-      <div className="section-kpis"><MiniKpi label="Quantité vendue" value={`${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires HT" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(report.sales.map((r) => r.client)).size} /></div>
+      <div className="section-kpis"><MiniKpi label="Quantité vendue" value={`${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires HT" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(displayRows.map((r) => normalizeClient(r.client))).size} /></div>
       <section className="two-grid">
         <ChartPanel title="CA par client" note="DA"><ResponsiveContainer width="100%" height={300}><BarChart data={clients} layout="vertical" margin={{ left: 12, right: 18 }}><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="CA" fill="#3f6f68" radius={[0,7,7,0]}/></BarChart></ResponsiveContainer></ChartPanel>
         <ChartPanel title="Quantité par produit" note="qtx"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={report.sales} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} />
+      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={displayRows} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} />
     </>
   );
 }
