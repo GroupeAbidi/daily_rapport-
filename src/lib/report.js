@@ -11,6 +11,32 @@ const asNumber = (value) => {
 
 export const sum = (rows, key) => rows.reduce((total, row) => total + asNumber(row[key]), 0);
 
+export const analyzeBalanceCollections = (collections = []) => {
+  const rows = collections
+    .filter((row) => row.source === 'BALANCE_CLIENT' && asNumber(row.montant_da) > 0)
+    .map((row) => {
+      const payment = asNumber(row.montant_da);
+      const dailySales = asNumber(row.chiffre_affaire);
+      const openingBalance = asNumber(row.solde_anterieur);
+      const difference = Math.max(0, payment - dailySales);
+      const previousBalanceCollected = Math.min(difference, Math.max(0, openingBalance));
+      return {
+        ...row,
+        ca_du_jour: dailySales,
+        difference_da: difference,
+        ancien_solde_encaisse: previousBalanceCollected,
+        avance_da: Math.max(0, difference - previousBalanceCollected),
+      };
+    });
+  return {
+    rows,
+    totalPayments: sum(rows, 'montant_da'),
+    previousBalanceCollected: sum(rows, 'ancien_solde_encaisse'),
+    previousBalanceClients: rows.filter((row) => row.ancien_solde_encaisse > 0).length,
+    advances: sum(rows, 'avance_da'),
+  };
+};
+
 export const summarizeReport = (report) => {
   const productionQtx = sum(report.production || [], 'quantite_qtx');
   const quotaQtx = sum(report.wheat || [], 'quota_qtx');

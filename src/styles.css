@@ -104,7 +104,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .hero-score span { color: #bcb0a8; font-size: 9px; }
 .hero-import { position: absolute; z-index: 3; right: 20px; bottom: 16px; display: none; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 11px; color: white; background: rgba(255,255,255,.07); font-size: 10px; font-weight: 900; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; margin: 16px 0; }
+.summary-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 16px 0; }
 .date-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); box-shadow: 0 6px 20px rgba(62,46,37,.04); }
 .date-toolbar > div { display: flex; align-items: center; gap: 10px; color: var(--red); }
 .date-toolbar span, .date-toolbar strong, .date-toolbar small { display: block; }
@@ -185,6 +185,7 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .section-title h1 { margin: 7px 0 5px; font-size: 25px; }
 .section-title p { margin: 0; color: #bfb2aa; font-size: 10px; line-height: 1.5; }
 .section-kpis { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 11px; margin-bottom: 14px; }
+.section-kpis.four-kpis { grid-template-columns: repeat(4,minmax(0,1fr)); }
 .mini-kpi { min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
 .mini-kpi small, .mini-kpi strong { display: block; }
 .mini-kpi small { color: #8e8178; font-size: 9px; font-weight: 800; }
@@ -279,6 +280,7 @@ td { color: #4b423d; }
   .hero-panel { grid-template-columns: 1fr; }
   .hero-score { width: min(100%,260px); }
   .section-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .section-kpis.four-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -304,6 +306,7 @@ td { color: #4b423d; }
   .section-title { min-height: 105px; padding: 17px; border-radius: 18px; }
   .section-title h1 { font-size: 21px; }
   .section-kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .section-kpis.four-kpis { grid-template-columns: 1fr 1fr; }
   .section-kpis .mini-kpi:first-child { grid-column: 1 / -1; }
   .mini-kpi { padding: 13px; }
   .mini-kpi strong { font-size: 16px; }

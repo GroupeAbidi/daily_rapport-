@@ -6,7 +6,7 @@ import {
   Scale,
   Wheat,
 } from 'lucide-react';
-import { formatDate, formatMoney, formatNumber, summarizeReport } from './lib/report.js';
+import { analyzeBalanceCollections, formatDate, formatMoney, formatNumber, summarizeReport } from './lib/report.js';
 
 export function Brand({ compact = false }) {
   return (
@@ -33,12 +33,14 @@ export function SummaryCards({ report, reports = [], onOpen }) {
     .sort((a, b) => b.report_date.localeCompare(a.report_date))[0];
   const balanceRows = latestBalanceReport?.collections?.filter((row) => row.source === 'BALANCE_CLIENT') || [];
   const totalClientBalance = balanceRows.reduce((sum, row) => sum + Number(row.solde || 0), 0);
+  const collectionAnalysis = analyzeBalanceCollections(report.collections || []);
   const cards = [
     { key: 'production', icon: Factory, label: 'Production', value: `${formatNumber(s.productionQtx)} qtx`, note: `${report.production?.length || 0} lignes`, tone: 'red' },
     { key: 'wheat', icon: Wheat, label: 'Suivi Blé', value: `${formatNumber(s.wheatReceivedQtx)} qtx`, note: s.wheatShortageQtx ? `Manque ${formatNumber(s.wheatShortageQtx)} qtx` : 'Quota couvert', tone: 'gold' },
     { key: 'sales', icon: PackageCheck, label: 'Ventes', value: formatMoney(s.salesAmount), note: `${formatNumber(s.salesQtx)} qtx${pdfSales ? ' · CA PDF' : ''}`, tone: 'green' },
     { key: 'collections', icon: Banknote, label: 'Encaissements', value: formatMoney(s.collectionsAmount), note: `${formatNumber(s.recoveryRate)}% du CA du jour`, tone: 'ink' },
     { key: 'client-balance', view: 'collections', icon: Scale, label: 'Solde total clients', value: formatMoney(totalClientBalance), note: balanceRows.length ? `${balanceRows.length} clients · au ${formatDate(latestBalanceReport.report_date)}` : 'Importez une balance clients', tone: 'gold' },
+    { key: 'previous-balance', view: 'collections', icon: Banknote, label: 'Ancien solde encaissé', value: formatMoney(collectionAnalysis.previousBalanceCollected), note: `${collectionAnalysis.previousBalanceClients} clients aujourd'hui`, tone: 'green' },
   ];
   return (
     <div className="summary-grid">

@@ -67,6 +67,7 @@ import {
   formatMoney,
   formatNumber,
   groupBy,
+  analyzeBalanceCollections,
   summarizeReport,
 } from './lib/report.js';
 
@@ -517,18 +518,19 @@ function ClientRecoveryPanel({ reports }) {
 function CollectionsView({ report, reports, onBack }) {
   const s = summarizeReport(report);
   const balanceRows = (report.collections || []).filter((row) => row.source === 'BALANCE_CLIENT');
-  const paymentRows = (report.collections || []).filter((row) => Number(row.montant_da || 0) !== 0);
+  const balanceAnalysis = analyzeBalanceCollections(report.collections || []);
+  const paymentRows = balanceRows.length ? balanceAnalysis.rows : (report.collections || []).filter((row) => Number(row.montant_da || 0) !== 0);
   const clients = groupBy(paymentRows, 'client', 'montant_da').slice(0, 10);
   const modes = groupBy(paymentRows, 'mode_paiement', 'montant_da');
   return (
     <>
       <SectionTitle icon={Banknote} kicker="Encaissements clients" title="Encaissements du jour" note="Montants réellement encaissés, par client et par mode de paiement." onBack={onBack} />
-      <div className="section-kpis"><MiniKpi label="Total encaissé" value={formatMoney(s.collectionsAmount)} tone="green" /><MiniKpi label="Taux recouvrement" value={`${formatNumber(s.recoveryRate)}%`} /><MiniKpi label="Clients encaissés" value={new Set(paymentRows.map((r) => r.client)).size} /></div>
+      <div className="section-kpis four-kpis"><MiniKpi label="Total encaissé" value={formatMoney(balanceRows.length ? balanceAnalysis.totalPayments : s.collectionsAmount)} tone="green" /><MiniKpi label="Ancien solde encaissé" value={formatMoney(balanceAnalysis.previousBalanceCollected)} /><MiniKpi label="Clients ancien solde" value={balanceAnalysis.previousBalanceClients} /><MiniKpi label="Avances clients" value={formatMoney(balanceAnalysis.advances)} tone="gold" /></div>
       <section className="two-grid">
         <ChartPanel title="Encaissement par client" note="DA"><ResponsiveContainer width="100%" height={Math.max(380, clients.length * 46)}><BarChart data={clients} layout="vertical" margin={{ left: 8, right: 22, top: 8, bottom: 8 }} barCategoryGap="28%"><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={165} axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 10, fill: '#625b57' }}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="Encaissé" fill="#c99715" radius={[0,7,7,0]} maxBarSize={25}/></BarChart></ResponsiveContainer></ChartPanel>
         <ChartPanel title="Modes de paiement" note="répartition"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={modes} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90}>{modes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip money/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable key={`payments-${report.id}`} title="Encaissements du jour" columns={[['date','Date'],['client','Client'],['montant_da','Montant'],['mode_paiement','Mode paiement'],['reference','Référence']]} rows={paymentRows} moneyKeys={['montant_da']} />
+      <DataTable key={`payments-${report.id}`} title="Encaissements du jour" columns={balanceRows.length ? [['client','Client'],['solde_anterieur','Solde antérieur'],['ca_du_jour','CA du jour'],['montant_da','Encaissé'],['ancien_solde_encaisse','Ancien solde encaissé'],['avance_da','Avance'],['solde','Solde final']] : [['date','Date'],['client','Client'],['montant_da','Montant']]} rows={paymentRows} moneyKeys={balanceRows.length ? ['solde_anterieur','ca_du_jour','montant_da','ancien_solde_encaisse','avance_da','solde'] : ['montant_da']} />
       <DataTable key={`balance-${report.id}`} title="Balance clients" columns={[['client_code','Code'],['client','Client'],['solde_anterieur','Solde antérieur'],['chiffre_affaire',"Chiffre d'affaires"],['montant_da','Paiement'],['solde','Nouveau solde']]} rows={balanceRows} moneyKeys={['solde_anterieur','chiffre_affaire','montant_da','solde']} />
       <ClientRecoveryPanel reports={reports} />
     </>
