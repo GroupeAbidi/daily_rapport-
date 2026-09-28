@@ -508,7 +508,7 @@ function ClientRecoveryPanel({ reports }) {
     </div>
     {selected && <>
       <div className="preview-grid recovery-kpis"><MiniKpi label="Client" value={selected.name}/><MiniKpi label="Paiement importé" value={formatMoney(latest?.montant_da || 0)}/><MiniKpi label="Solde actuel" value={formatMoney(balance)} tone={balance > 0 ? 'red' : 'green'}/><MiniKpi label="Situation" value={accountStatus}/></div>
-      <DataTable columns={[['date','Date vente'],['reference','Facture / origine'],['montant_da','Montant HT'],['paid','Affecté'],['remaining','Reste'],['status','État']]} rows={recovery.debts} moneyKeys={['montant_da','paid','remaining']} />
+      <DataTable title="Affectation estimative des paiements" columns={[['date','Date vente'],['reference','Facture / origine'],['montant_da','Montant HT'],['paid','Affecté'],['remaining','Reste'],['status','État']]} rows={recovery.debts} moneyKeys={['montant_da','paid','remaining']} />
       {recovery.unapplied > 0.01 && <div className="validation-ok"><CheckCircle2 size={18}/><span>{formatMoney(recovery.unapplied)} de paiement reste non affecté aux factures disponibles.</span></div>}
     </>}
   </article>;
@@ -528,8 +528,8 @@ function CollectionsView({ report, reports, onBack }) {
         <ChartPanel title="Encaissement par client" note="DA"><ResponsiveContainer width="100%" height={Math.max(380, clients.length * 46)}><BarChart data={clients} layout="vertical" margin={{ left: 8, right: 22, top: 8, bottom: 8 }} barCategoryGap="28%"><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={165} axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 10, fill: '#625b57' }}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="Encaissé" fill="#c99715" radius={[0,7,7,0]} maxBarSize={25}/></BarChart></ResponsiveContainer></ChartPanel>
         <ChartPanel title="Modes de paiement" note="répartition"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={modes} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90}>{modes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip money/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable columns={[['date','Date'],['client','Client'],['montant_da','Montant'],['mode_paiement','Mode paiement'],['reference','Référence']]} rows={paymentRows} moneyKeys={['montant_da']} />
-      {balanceRows.length > 0 && <DataTable columns={[['client_code','Code'],['client','Client'],['solde_anterieur','Solde antérieur'],['chiffre_affaire',"Chiffre d'affaires"],['montant_da','Paiement'],['solde','Nouveau solde']]} rows={balanceRows} moneyKeys={['solde_anterieur','chiffre_affaire','montant_da','solde']} />}
+      <DataTable key={`payments-${report.id}`} title="Encaissements du jour" columns={[['date','Date'],['client','Client'],['montant_da','Montant'],['mode_paiement','Mode paiement'],['reference','Référence']]} rows={paymentRows} moneyKeys={['montant_da']} />
+      <DataTable key={`balance-${report.id}`} title="Balance clients" columns={[['client_code','Code'],['client','Client'],['solde_anterieur','Solde antérieur'],['chiffre_affaire',"Chiffre d'affaires"],['montant_da','Paiement'],['solde','Nouveau solde']]} rows={balanceRows} moneyKeys={['solde_anterieur','chiffre_affaire','montant_da','solde']} />
       <ClientRecoveryPanel reports={reports} />
     </>
   );
@@ -543,7 +543,7 @@ function ChartPanel({ title, note, children }) {
   return <article className="panel chart-panel"><header className="panel-header"><div><span>Analyse</span><h2>{title}</h2></div><small>{note}</small></header><div className="chart-wrap">{children}</div></article>;
 }
 
-function DataTable({ columns, rows, numberKeys = [], moneyKeys = [], searchKey = '', searchPlaceholder = '' }) {
+function DataTable({ title = 'Données du rapport', columns, rows, numberKeys = [], moneyKeys = [], searchKey = '', searchPlaceholder = '' }) {
   const [query, setQuery] = useState('');
   const [hidden, setHidden] = useState(false);
   const visibleRows = searchKey && query.trim()
@@ -551,7 +551,7 @@ function DataTable({ columns, rows, numberKeys = [], moneyKeys = [], searchKey =
     : rows;
   return (
     <article className="panel table-panel">
-      <header className="panel-header table-panel-header"><div><span>Détail</span><h2>Données du rapport</h2></div><div className="table-header-actions"><small>{visibleRows.length}{query.trim() ? ` / ${rows.length}` : ''} lignes</small><button type="button" onClick={() => setHidden((value) => !value)} aria-expanded={!hidden}>{hidden ? <Eye size={15}/> : <EyeOff size={15}/>}<span>{hidden ? 'Afficher' : 'Masquer'}</span></button></div></header>
+      <header className="panel-header table-panel-header"><div><span>Détail</span><h2>{title}</h2></div><div className="table-header-actions"><small>{visibleRows.length}{query.trim() ? ` / ${rows.length}` : ''} lignes</small><button type="button" onClick={() => setHidden((value) => !value)} aria-expanded={!hidden}>{hidden ? <Eye size={15}/> : <EyeOff size={15}/>}<span>{hidden ? 'Afficher' : 'Masquer'}</span></button></div></header>
       {!hidden && <>
         {searchKey && <label className="table-search"><Search size={17}/><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder || 'Rechercher…'} aria-label={searchPlaceholder || 'Rechercher'}/>{query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche"><X size={15}/></button>}</label>}
         <div className="table-scroll"><table><thead><tr>{columns.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead><tbody>{visibleRows.length ? visibleRows.map((row, index) => <tr key={index}>{columns.map(([key]) => <td key={key}>{moneyKeys.includes(key) ? formatMoney(row[key]) : numberKeys.includes(key) ? formatNumber(row[key]) : key === 'date' ? formatDate(row[key]) : row[key] || '—'}</td>)}</tr>) : <tr><td colSpan={columns.length}>Aucune donnée trouvée.</td></tr>}</tbody></table></div>
