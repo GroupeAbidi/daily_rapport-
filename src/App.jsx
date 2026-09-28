@@ -82,22 +82,15 @@ const keepLatestReportPerDay = (items) => {
   return [...latest.values()].sort((a, b) => `${b.report_date}-${b.version || 0}`.localeCompare(`${a.report_date}-${a.version || 0}`));
 };
 
-const normalizeClient = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
-
-const combinePdfCaWithExcelQuantities = (caRows = [], quantityRows = []) => caRows.map((caRow) => {
-  let matches = quantityRows.filter((row) => caRow.reference && String(row.reference || '') === String(caRow.reference));
-  if (!matches.length) {
-    matches = quantityRows.filter((row) => row.date === caRow.date && normalizeClient(row.client) === normalizeClient(caRow.client));
-  }
-  if (!matches.length) return caRow;
-  const products = [...new Set(matches.map((row) => row.produit).filter(Boolean))];
-  return {
-    ...caRow,
-    quantite_qtx: matches.reduce((sum, row) => sum + Number(row.quantite_qtx || 0), 0),
-    produit: products.join(' + ') || 'Vente',
-    source: 'PDF_CA+EXCEL_QTY',
-  };
-});
+const combinePdfCaWithExcelQuantities = (caRows = [], quantityRows = []) => {
+  const pdfSales = caRows
+    .filter((row) => row.source !== 'EXCEL_QTY')
+    .map((row) => ({ ...row, quantite_qtx: 0, source: 'PDF_CA' }));
+  const excelQuantities = quantityRows
+    .filter((row) => row.source === 'EXCEL_QTY' || Number(row.montant_da || 0) === 0)
+    .map((row) => ({ ...row, montant_da: 0, source: 'EXCEL_QTY' }));
+  return [...pdfSales, ...excelQuantities];
+};
 
 function Toast({ toast, onClose }) {
   if (!toast) return null;
