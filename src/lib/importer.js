@@ -639,6 +639,8 @@ const parseSalesAndCollections = (
 
         montant_da:
           farineAmount,
+
+        reference: String(bonNumber || '').trim(),
       });
     }
 
@@ -679,6 +681,8 @@ const parseSalesAndCollections = (
 
         montant_da:
           otherAmount,
+
+        reference: String(bonNumber || '').trim(),
       });
     }
 
@@ -850,8 +854,8 @@ export async function parseValidatedFile(
     report.status = 'DRAFT';
     report.production = parseProduction(productionRows, date);
     report.wheat = parseWheat(deliveryRows, date);
-    // CA/Ventes is imported separately from the accounting PDF.
-    report.sales = [];
+    // Excel remains the quantity/product source; CA amounts come from the PDF.
+    report.sales = sales.map((row) => ({ ...row, montant_da: 0, source: 'EXCEL_QTY' }));
     report.collections = collections;
     report.note = `Import automatique du rapport Minoterie du ${formatDateForTitle(date)}.`;
     return report;

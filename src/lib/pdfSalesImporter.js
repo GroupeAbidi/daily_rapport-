@@ -75,6 +75,7 @@ export async function parseSalesPdf(file) {
         quantite_qtx: 0,
         montant_da: montant,
         reference,
+        source: 'PDF_CA',
       });
     });
   }

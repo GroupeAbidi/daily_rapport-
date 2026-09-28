@@ -78,6 +78,23 @@ const keepLatestReportPerDay = (items) => {
   return [...latest.values()].sort((a, b) => `${b.report_date}-${b.version || 0}`.localeCompare(`${a.report_date}-${a.version || 0}`));
 };
 
+const normalizeClient = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+const combinePdfCaWithExcelQuantities = (caRows = [], quantityRows = []) => caRows.map((caRow) => {
+  let matches = quantityRows.filter((row) => caRow.reference && String(row.reference || '') === String(caRow.reference));
+  if (!matches.length) {
+    matches = quantityRows.filter((row) => row.date === caRow.date && normalizeClient(row.client) === normalizeClient(caRow.client));
+  }
+  if (!matches.length) return caRow;
+  const products = [...new Set(matches.map((row) => row.produit).filter(Boolean))];
+  return {
+    ...caRow,
+    quantite_qtx: matches.reduce((sum, row) => sum + Number(row.quantite_qtx || 0), 0),
+    produit: products.join(' + ') || 'Vente',
+    source: 'PDF_CA+EXCEL_QTY',
+  };
+});
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -206,7 +223,7 @@ function Hero({ report, role, onImport }) {
 
 function HomeView({ report, setView, reports, onSelectReport, role, onImport }) {
   const s = summarizeReport(report);
-  const pdfSales = report.sales?.some((row) => row.produit === 'CA PDF');
+  const pdfSales = report.sales?.some((row) => row.source?.includes('PDF') || row.produit === 'CA PDF');
   const trendData = useMemo(() => reports
     .filter((item) => item.status === 'PUBLISHED')
     .slice(0, 7)
@@ -216,7 +233,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
       return {
         date: formatDate(item.report_date).slice(0, 5),
         Production: summary.productionQtx,
-        'CA ventes': summary.salesAmount,
+        Ventes: summary.salesQtx,
         Recouvrement: Math.min(summary.recoveryRate, 140),
       };
     }), [reports]);
@@ -241,7 +258,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
       </div>
       <SummaryCards report={report} onOpen={setView} />
       <section className="analysis-grid">
-        <ChartPanel title="Production et CA sur 7 rapports" note="qtx / DA">
+        <ChartPanel title="Production et ventes sur 7 rapports" note="qtx">
           <ResponsiveContainer width="100%" height={270}>
             <AreaChart data={trendData} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
               <defs>
@@ -249,10 +266,10 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
                 <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3f6f68" stopOpacity={0.24}/><stop offset="95%" stopColor="#3f6f68" stopOpacity={0}/></linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="#eee7df" strokeDasharray="4 4"/>
-              <XAxis dataKey="date" axisLine={false} tickLine={false}/><YAxis yAxisId="production" axisLine={false} tickLine={false}/><YAxis yAxisId="sales" orientation="right" axisLine={false} tickLine={false} tickFormatter={(value) => `${formatNumber(value / 1000000)} M`}/>
+              <XAxis dataKey="date" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/>
               <Tooltip content={<ChartTooltip/>}/><Legend/>
-              <Area yAxisId="production" type="monotone" dataKey="Production" unit=" qtx" stroke="#7a3024" strokeWidth={3} fill="url(#productionFill)" activeDot={{ r: 5 }}/>
-              <Area yAxisId="sales" type="monotone" dataKey="CA ventes" unit=" DA" stroke="#3f6f68" strokeWidth={3} fill="url(#salesFill)" activeDot={{ r: 5 }}/>
+              <Area type="monotone" dataKey="Production" unit=" qtx" stroke="#7a3024" strokeWidth={3} fill="url(#productionFill)" activeDot={{ r: 5 }}/>
+              <Area type="monotone" dataKey="Ventes" unit=" qtx" stroke="#3f6f68" strokeWidth={3} fill="url(#salesFill)" activeDot={{ r: 5 }}/>
             </AreaChart>
           </ResponsiveContainer>
         </ChartPanel>
@@ -260,7 +277,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
           <header className="panel-header"><div><span>Pilotage</span><h2>Indicateurs de performance</h2></div><Activity size={20}/></header>
           <div className="performance-list">
             <PerformanceRow icon={Target} label="Rendement réception → production" value={productionCoverage} target={95} numerator={s.productionQtx} denominator={s.wheatReceivedQtx} numeratorLabel="كمية الإنتاج" denominatorLabel="كمية القمح المستلم" unit="qtx" explanation="يوضح كمية الإنتاج المحققة مقابل القمح المستلم خلال اليوم."/>
-            <PerformanceRow icon={TrendingUp} label="Écoulement de la production" value={pdfSales ? NaN : salesCoverage} target={80} numerator={s.salesQtx} denominator={s.productionQtx} numeratorLabel="الكمية المباعة" denominatorLabel="الكمية المنتجة" unit="qtx" explanation={pdfSales ? "غير متاح: ملف PDF يحتوي على رقم الأعمال والفواتير، لكنه لا يحتوي على الكميات المباعة." : "يوضح نسبة الكمية المباعة مقارنة بإنتاج اليوم. تجاوز 100٪ يعني أن جزءًا من مخزون الأيام السابقة تم بيعه."}/>
+            <PerformanceRow icon={TrendingUp} label="Écoulement de la production" value={pdfSales && !s.salesQtx ? NaN : salesCoverage} target={80} numerator={s.salesQtx} denominator={s.productionQtx} numeratorLabel="الكمية المباعة" denominatorLabel="الكمية المنتجة" unit="qtx" explanation={pdfSales && !s.salesQtx ? "أعد استيراد ملف Excel لربط كميات البيع بفواتير PDF." : "يوضح نسبة الكمية المباعة مقارنة بإنتاج اليوم. الكميات مأخوذة من Excel ورقم الأعمال مأخوذ من PDF، ويتم الربط برقم الفاتورة."}/>
             <PerformanceRow icon={Banknote} label="Recouvrement du chiffre d'affaires" value={s.recoveryRate} target={90} numerator={s.collectionsAmount} denominator={s.salesAmount} numeratorLabel="المبالغ المحصلة" denominatorLabel="قيمة المبيعات" unit="money" explanation="يوضح المبلغ المحصل فعليًا مقارنة بقيمة مبيعات اليوم."/>
           </div>
           <div className={`alert-box ${alerts.length ? 'warning' : 'success'}`}>
@@ -275,7 +292,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
           <div className="decision-list">
             <div><span>Production</span><strong>{formatNumber(s.productionQtx)} qtx</strong><small>Produit fini déclaré</small></div>
             <div><span>Blé reçu</span><strong>{formatNumber(s.wheatReceivedQtx)} qtx</strong><small>sur {formatNumber(s.quotaQtx)} qtx de quota</small></div>
-            <div><span>Ventes</span><strong>{formatMoney(s.salesAmount)}</strong><small>{pdfSales ? `${report.sales.length} livraisons PDF` : `${formatNumber(s.salesQtx)} qtx vendus`}</small></div>
+            <div><span>Ventes</span><strong>{formatMoney(s.salesAmount)}</strong><small>{formatNumber(s.salesQtx)} qtx · {pdfSales ? 'CA PDF' : 'Excel'}</small></div>
             <div><span>Encaissements</span><strong>{formatMoney(s.collectionsAmount)}</strong><small>{formatNumber(s.recoveryRate)}% du chiffre du jour</small></div>
           </div>
         </article>
@@ -366,20 +383,18 @@ function WheatView({ report, onBack }) {
 
 function SalesView({ report, onBack }) {
   const s = summarizeReport(report);
-  const pdfMode = report.sales?.some((row) => row.produit === 'CA PDF');
+  const pdfMode = report.sales?.some((row) => row.source?.includes('PDF') || row.produit === 'CA PDF');
   const clients = groupBy(report.sales || [], 'client', 'montant_da').slice(0, 8);
-  const products = pdfMode
-    ? [...new Map(report.sales.map((row) => [row.client, 0])).keys()].map((name) => ({ name, value: report.sales.filter((row) => row.client === name).length })).sort((a, b) => b.value - a.value).slice(0, 8)
-    : groupBy(report.sales || [], 'produit', 'quantite_qtx');
+  const products = groupBy(report.sales || [], 'produit', 'quantite_qtx');
   return (
     <>
       <SectionTitle icon={PackageCheck} kicker="Ventes" title="Ventes du jour" note={pdfMode ? "Chiffre d'affaires HT issu du PDF des livraisons clients." : "Quantités vendues, chiffre d'affaires et principaux clients."} onBack={onBack} />
-      <div className="section-kpis"><MiniKpi label={pdfMode ? 'Livraisons / factures' : 'Quantité vendue'} value={pdfMode ? report.sales.length : `${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires HT" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(report.sales.map((r) => r.client)).size} /></div>
+      <div className="section-kpis"><MiniKpi label="Quantité vendue" value={`${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires HT" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(report.sales.map((r) => r.client)).size} /></div>
       <section className="two-grid">
         <ChartPanel title="CA par client" note="DA"><ResponsiveContainer width="100%" height={300}><BarChart data={clients} layout="vertical" margin={{ left: 12, right: 18 }}><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="CA" fill="#3f6f68" radius={[0,7,7,0]}/></BarChart></ResponsiveContainer></ChartPanel>
-        <ChartPanel title={pdfMode ? 'Nombre de livraisons par client' : 'Quantité par produit'} note={pdfMode ? 'factures' : 'qtx'}><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
+        <ChartPanel title="Quantité par produit" note="qtx"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
-      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={report.sales} numberKeys={pdfMode ? [] : ['quantite_qtx']} moneyKeys={['montant_da']} />
+      <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={report.sales} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} />
     </>
   );
 }
@@ -582,7 +597,8 @@ function App() {
       const sourceReports = draft.historical_reports?.length ? draft.historical_reports : [draft];
       const importedReports = sourceReports.map((item) => {
         const existing = keepLatestReportPerDay(reports).find((row) => row.report_date === item.report_date);
-        return !item.sales?.length && existing?.sales?.length ? { ...item, sales: existing.sales } : item;
+        const pdfSales = existing?.sales?.filter((row) => row.source !== 'EXCEL_QTY') || [];
+        return pdfSales.length ? { ...item, sales: combinePdfCaWithExcelQuantities(pdfSales, item.sales) } : item;
       });
       if (cloudEnabled) {
         for (const item of importedReports) {
@@ -629,7 +645,7 @@ function App() {
             note: `CA ventes importé depuis ${pdfData.source_file}.`,
           }),
           report_date: date,
-          sales,
+          sales: combinePdfCaWithExcelQuantities(sales, existing?.sales || []),
           source_file: pdfData.source_file,
         };
       }).sort((a, b) => a.report_date.localeCompare(b.report_date));
