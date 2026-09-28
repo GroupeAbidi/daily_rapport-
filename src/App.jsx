@@ -216,7 +216,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
       return {
         date: formatDate(item.report_date).slice(0, 5),
         Production: summary.productionQtx,
-        Ventes: summary.salesQtx,
+        'CA ventes': summary.salesAmount,
         Recouvrement: Math.min(summary.recoveryRate, 140),
       };
     }), [reports]);
@@ -241,7 +241,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
       </div>
       <SummaryCards report={report} onOpen={setView} />
       <section className="analysis-grid">
-        <ChartPanel title="Tendance sur 7 rapports" note="qtx">
+        <ChartPanel title="Production et CA sur 7 rapports" note="qtx / DA">
           <ResponsiveContainer width="100%" height={270}>
             <AreaChart data={trendData} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
               <defs>
@@ -249,10 +249,10 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
                 <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3f6f68" stopOpacity={0.24}/><stop offset="95%" stopColor="#3f6f68" stopOpacity={0}/></linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="#eee7df" strokeDasharray="4 4"/>
-              <XAxis dataKey="date" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/>
+              <XAxis dataKey="date" axisLine={false} tickLine={false}/><YAxis yAxisId="production" axisLine={false} tickLine={false}/><YAxis yAxisId="sales" orientation="right" axisLine={false} tickLine={false} tickFormatter={(value) => `${formatNumber(value / 1000000)} M`}/>
               <Tooltip content={<ChartTooltip/>}/><Legend/>
-              <Area type="monotone" dataKey="Production" stroke="#7a3024" strokeWidth={3} fill="url(#productionFill)" activeDot={{ r: 5 }}/>
-              <Area type="monotone" dataKey="Ventes" stroke="#3f6f68" strokeWidth={3} fill="url(#salesFill)" activeDot={{ r: 5 }}/>
+              <Area yAxisId="production" type="monotone" dataKey="Production" unit=" qtx" stroke="#7a3024" strokeWidth={3} fill="url(#productionFill)" activeDot={{ r: 5 }}/>
+              <Area yAxisId="sales" type="monotone" dataKey="CA ventes" unit=" DA" stroke="#3f6f68" strokeWidth={3} fill="url(#salesFill)" activeDot={{ r: 5 }}/>
             </AreaChart>
           </ResponsiveContainer>
         </ChartPanel>
@@ -327,7 +327,10 @@ function SectionTitle({ icon: Icon, kicker, title, note, onBack }) {
 
 function ChartTooltip({ active, payload, label, money = false }) {
   if (!active || !payload?.length) return null;
-  return <div className="chart-tooltip"><strong>{label || payload[0]?.name}</strong>{payload.map((item) => <span key={`${item.dataKey}-${item.name}`}>{item.name}: {money ? formatMoney(item.value) : formatNumber(item.value)}</span>)}</div>;
+  return <div className="chart-tooltip"><strong>{label || payload[0]?.name}</strong>{payload.map((item) => {
+    const isMoney = money || item.dataKey === 'CA ventes';
+    return <span key={`${item.dataKey}-${item.name}`}>{item.name}: {isMoney ? formatMoney(item.value) : `${formatNumber(item.value)}${item.unit || ''}`}</span>;
+  })}</div>;
 }
 
 function ProductionView({ report, onBack }) {
