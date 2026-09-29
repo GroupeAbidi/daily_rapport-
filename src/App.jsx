@@ -105,6 +105,10 @@ const normalizeReference = (value) => {
   const reference = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   return /^\d+$/.test(reference) ? String(Number(reference)) : reference;
 };
+const normalizeProductLabel = (value) => {
+  const product = String(value || 'Vente').trim();
+  return /^Farine\s+(SON|ZWAL|DECHET)/i.test(product) ? product.replace(/^Farine\s+/i, '') : product;
+};
 
 const salesMatchKey = (row) => {
   const reference = normalizeReference(row.reference);
@@ -118,7 +122,8 @@ const aggregateSalesRows = (rows, kind) => {
     const current = grouped.get(key) || { ...row, quantite_qtx: 0, montant_da: 0, products: [] };
     current.quantite_qtx += Number(row.quantite_qtx || 0);
     current.montant_da += Number(row.montant_da || 0);
-    if (kind === 'excel' && row.produit && !current.products.includes(row.produit)) current.products.push(row.produit);
+    const product = normalizeProductLabel(row.produit);
+    if (kind === 'excel' && product && !current.products.includes(product)) current.products.push(product);
     grouped.set(key, current);
   });
   return grouped;
@@ -466,14 +471,19 @@ function SalesView({ report, onBack }) {
   const pdfMode = report.sales?.some((row) => row.source?.includes('PDF') || row.produit === 'CA PDF');
   const displayRows = pdfMode ? salesDisplayRows(report.sales || []) : report.sales;
   const clients = groupBy(report.sales || [], 'client', 'montant_da').slice(0, 8);
-  const products = groupBy(report.sales || [], 'produit', 'quantite_qtx');
+  const productMap = new Map();
+  (report.sales || []).filter((row) => row.source === 'EXCEL_QTY' && Number(row.quantite_qtx || 0) > 0).forEach((row) => {
+    const product = normalizeProductLabel(row.produit);
+    productMap.set(product, (productMap.get(product) || 0) + Number(row.quantite_qtx || 0));
+  });
+  const products = [...productMap].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   return (
     <>
       <SectionTitle icon={PackageCheck} kicker="Ventes" title="Ventes du jour" note={pdfMode ? "Chiffre d'affaires HT issu du PDF des livraisons clients." : "Quantités vendues, chiffre d'affaires et principaux clients."} onBack={onBack} />
       <div className="section-kpis"><MiniKpi label="Quantité vendue" value={`${formatNumber(s.salesQtx)} qtx`} /><MiniKpi label="Chiffre d'affaires HT" value={formatMoney(s.salesAmount)} tone="green" /><MiniKpi label="Clients" value={new Set(displayRows.map((r) => normalizeClient(r.client))).size} /></div>
       <section className="two-grid">
         <ChartPanel title="CA par client" note="DA"><ResponsiveContainer width="100%" height={300}><BarChart data={clients} layout="vertical" margin={{ left: 12, right: 18 }}><CartesianGrid horizontal={false} stroke="#e8e0d6"/><XAxis type="number" hide/><YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false}/><Tooltip content={<ChartTooltip money/>}/><Bar dataKey="value" name="CA" fill="#3f6f68" radius={[0,7,7,0]}/></BarChart></ResponsiveContainer></ChartPanel>
-        <ChartPanel title="Quantité par produit" note="qtx"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend/></PieChart></ResponsiveContainer></ChartPanel>
+        <ChartPanel title="Quantité par produit" note="qtx"><ResponsiveContainer width="100%" height={320}><PieChart><Pie data={products} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={1}>{products.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip content={<ChartTooltip/>}/><Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }}/></PieChart></ResponsiveContainer></ChartPanel>
       </section>
       <DataTable columns={pdfMode ? [['date','Date'],['client','Client'],['reference','Facture'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant HT']] : [['date','Date'],['client','Client'],['produit','Produit'],['quantite_qtx','Quantité qtx'],['montant_da','Montant']]} rows={displayRows} numberKeys={['quantite_qtx']} moneyKeys={['montant_da']} searchKey="client" searchPlaceholder="Rechercher un client…" />
     </>
