@@ -88,8 +88,13 @@ const keepLatestReportPerDay = (items) => {
 
 const normalizeClient = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
 const SPECIAL_CLIENT_CODES = new Set(['C514', 'C583']);
-const SPECIAL_CLIENT_NAMES = new Set(['lagraamer', 'boulatrousefares']);
-const isSpecialClient = (row) => SPECIAL_CLIENT_CODES.has(String(row?.client_code || '').trim().toUpperCase()) || SPECIAL_CLIENT_NAMES.has(normalizeClient(row?.client));
+const SPECIAL_CLIENT_NAMES = new Set(['lagraamer', 'boulatrousefares', 'boulatrousfares']);
+const isSpecialClient = (row) => {
+  const name = normalizeClient(row?.client);
+  return SPECIAL_CLIENT_CODES.has(String(row?.client_code || '').trim().toUpperCase())
+    || SPECIAL_CLIENT_NAMES.has(name)
+    || (name.startsWith('boulatrous') && name.endsWith('fares'));
+};
 const clientInScope = (row, scope) => scope === 'all' || (scope === 'special' ? isSpecialClient(row) : !isSpecialClient(row));
 const filterReportByClient = (report, scope) => scope === 'all' ? report : {
   ...report,
