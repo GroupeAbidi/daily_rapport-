@@ -112,6 +112,14 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .date-toolbar small { margin-top: 2px; color: #95877d; font-size: 8px; }
 .date-toolbar select { min-width: 180px; height: 40px; padding: 0 34px 0 12px; border: 1px solid var(--line); border-radius: 11px; outline: none; color: var(--ink); background: white; font-size: 11px; font-weight: 800; }
 .date-toolbar select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,151,21,.12); }
+.client-slicer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); box-shadow: 0 7px 22px rgba(62,46,37,.045); }
+.client-slicer > div:first-child { min-width: 0; display: flex; align-items: center; gap: 9px; color: var(--red); }
+.client-slicer > div:first-child span, .client-slicer > div:first-child strong, .client-slicer > div:first-child small { display: block; }
+.client-slicer > div:first-child strong { color: var(--ink); font-size: 10px; }
+.client-slicer > div:first-child small { margin-top: 2px; color: #93867d; font-size: 8px; }
+.slicer-options { display: flex; align-items: center; gap: 6px; padding: 4px; border-radius: 12px; background: #f1ebe5; }
+.slicer-options button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 9px; color: #756860; background: transparent; font-size: 9px; font-weight: 850; white-space: nowrap; }
+.slicer-options button.active { color: white; background: var(--red); box-shadow: 0 5px 13px rgba(122,48,36,.2); }
 .summary-card { min-width: 0; min-height: 120px; display: flex; align-items: center; gap: 13px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: var(--paper); text-align: left; box-shadow: 0 8px 26px rgba(62,46,37,.055); transition: .2s ease; }
 .summary-card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(62,46,37,.09); }
 .summary-card:active { transform: translateY(0) scale(.985); }
@@ -281,6 +289,9 @@ td { color: #4b423d; }
   .hero-score { width: min(100%,260px); }
   .section-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .section-kpis.four-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .client-slicer { align-items: stretch; flex-direction: column; }
+  .slicer-options { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .slicer-options button { padding: 0 7px; white-space: normal; }
 }
 
 @media (max-width: 560px) {

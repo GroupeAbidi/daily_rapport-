@@ -87,6 +87,15 @@ const keepLatestReportPerDay = (items) => {
 };
 
 const normalizeClient = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+const SPECIAL_CLIENT_CODES = new Set(['C514', 'C583']);
+const SPECIAL_CLIENT_NAMES = new Set(['lagraamer', 'boulatrousefares']);
+const isSpecialClient = (row) => SPECIAL_CLIENT_CODES.has(String(row?.client_code || '').trim().toUpperCase()) || SPECIAL_CLIENT_NAMES.has(normalizeClient(row?.client));
+const clientInScope = (row, scope) => scope === 'all' || (scope === 'special' ? isSpecialClient(row) : !isSpecialClient(row));
+const filterReportByClient = (report, scope) => scope === 'all' ? report : {
+  ...report,
+  sales: (report.sales || []).filter((row) => clientInScope(row, scope)),
+  collections: (report.collections || []).filter((row) => clientInScope(row, scope)),
+};
 const normalizeReference = (value) => {
   const reference = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   return /^\d+$/.test(reference) ? String(Number(reference)) : reference;
@@ -252,6 +261,18 @@ function BottomNav({ view, setView }) {
       ))}
     </nav>
   );
+}
+
+function ClientSlicer({ value, onChange }) {
+  const options = [
+    ['all', 'Tous les clients'],
+    ['special', 'LAGRA + BOULATROUSE'],
+    ['without-special', 'Tous sauf les 2 clients'],
+  ];
+  return <section className="client-slicer" aria-label="Filtre clients">
+    <div><Search size={16}/><span><strong>Filtre clients</strong><small>Appliqué aux ventes, encaissements, soldes et recouvrement</small></span></div>
+    <div className="slicer-options">{options.map(([key, label]) => <button type="button" key={key} className={value === key ? 'active' : ''} onClick={() => onChange(key)}>{label}</button>)}</div>
+  </section>;
 }
 
 function Hero({ report, role, onImport }) {
@@ -704,6 +725,7 @@ function App() {
   const [importOpen, setImportOpen] = useState(false);
   const [salesPdfOpen, setSalesPdfOpen] = useState(false);
   const [balanceOpen, setBalanceOpen] = useState(false);
+  const [clientScope, setClientScope] = useState('all');
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -914,7 +936,8 @@ function App() {
 
   const roleReports = session.profile.role === 'MANAGER' ? reports.filter((r) => r.status === 'PUBLISHED') : reports;
   const visibleReports = keepLatestReportPerDay(roleReports);
-  const selected = visibleReports.find((item) => item.id === selectedId) || visibleReports[0];
+  const scopedReports = visibleReports.map((report) => filterReportByClient(report, clientScope));
+  const selected = scopedReports.find((item) => item.id === selectedId) || scopedReports[0];
 
   if (!selected) {
     return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onClear={clearAllData}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} {salesPdfOpen && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>} {balanceOpen && <BalanceImportModal onClose={() => setBalanceOpen(false)} onPublish={publishClientBalance} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
@@ -925,11 +948,12 @@ function App() {
     <div className="app-shell">
       <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onClear={clearAllData} />
       <main className="app-main" key={`${view}-${selected.id}`}>
-        {view === 'home' && <HomeView report={selected} setView={setView} reports={visibleReports} onSelectReport={setReport} role={session.profile.role} onImport={() => setImportOpen(true)} />}
+        <ClientSlicer value={clientScope} onChange={setClientScope} />
+        {view === 'home' && <HomeView report={selected} setView={setView} reports={scopedReports} onSelectReport={setReport} role={session.profile.role} onImport={() => setImportOpen(true)} />}
         {view === 'production' && <ProductionView report={selected} onBack={() => setView('home')} />}
         {view === 'wheat' && <WheatView report={selected} onBack={() => setView('home')} />}
         {view === 'sales' && <SalesView report={selected} onBack={() => setView('home')} />}
-        {view === 'collections' && <CollectionsView report={selected} reports={visibleReports} onBack={() => setView('home')} />}
+        {view === 'collections' && <CollectionsView report={selected} reports={scopedReports} onBack={() => setView('home')} />}
       </main>
       <BottomNav view={view} setView={setView} />
       {importOpen && session.profile.role === 'ANALYST' && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} 
