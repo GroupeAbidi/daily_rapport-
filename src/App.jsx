@@ -57,7 +57,8 @@ import {
   cloudLoadReports,
   cloudLoadSession,
   cloudClearReports,
-  cloudPublishReport,
+  cloudApproveReport,
+  cloudSaveDraft,
   cloudSignIn,
   cloudSignOut,
 } from './lib/supabase.js';
@@ -233,7 +234,7 @@ function Login({ busy, onLogin }) {
   );
 }
 
-function Header({ session, report, onLogout, onImport, onImportSales, onImportBalance, onClear }) {
+function Header({ session, report, onLogout, onImport, onImportSales, onImportBalance, onApprove, onClear }) {
   const analyst = session.profile.role === 'ANALYST';
   return (
     <header className="app-header">
@@ -242,6 +243,7 @@ function Header({ session, report, onLogout, onImport, onImportSales, onImportBa
         {analyst && <button className="header-import ca-import" onClick={onImportSales}><FileText size={17} /><span>CA PDF</span></button>}
         {analyst && <button className="header-import balance-import" onClick={onImportBalance}><Scale size={17} /><span>Balance clients</span></button>}
         {analyst && <button className="header-import" onClick={onImport}><Upload size={17} /><span>Rapport Excel</span></button>}
+        {analyst && report?.status === 'DRAFT' && <button className="header-import approve-import" onClick={onApprove}><CheckCircle2 size={17} /><span>Publier au manager</span></button>}
         <div className="user-chip">
           <div><strong>{session.profile.full_name}</strong><small>{analyst ? 'Analyste' : 'Manager'}</small></div>
           <span>{session.profile.full_name?.charAt(0) || 'A'}</span>
@@ -294,7 +296,7 @@ function Hero({ report, role, onImport }) {
         <span className="eyebrow"><CalendarDays size={15} /> Rapport du {formatDate(report.report_date)}</span>
         <h1>Minoterie — synthèse journalière</h1>
         <p>{report.note || 'Aucune observation analyste pour cette journée.'}</p>
-        <div className="hero-meta"><StatusPill status={report.status} /><span>v{report.version || 1}</span><span>Publié {formatDateTime(report.published_at)}</span></div>
+        <div className="hero-meta"><StatusPill status={report.status} /><span>v{report.version || 1}</span><span>{report.status === 'DRAFT' ? 'Visible uniquement par l’analyste' : `Publié ${formatDateTime(report.published_at)}`}</span></div>
       </div>
       <div className="hero-score">
         <small>Taux de recouvrement</small>
@@ -310,7 +312,6 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
   const s = summarizeReport(report);
   const pdfSales = report.sales?.some((row) => row.source?.includes('PDF') || row.produit === 'CA PDF');
   const trendData = useMemo(() => reports
-    .filter((item) => item.status === 'PUBLISHED')
     .slice(0, 7)
     .reverse()
     .map((item) => {
@@ -338,7 +339,7 @@ function HomeView({ report, setView, reports, onSelectReport, role, onImport }) 
           const selectedReport = reports.find((item) => item.id === event.target.value);
           if (selectedReport) onSelectReport(selectedReport);
         }} aria-label="Choisir la date du rapport">
-          {reports.filter((item) => item.status === 'PUBLISHED').map((item) => <option key={item.id} value={item.id}>{formatDate(item.report_date)} · v{item.version || 1}</option>)}
+          {reports.map((item) => <option key={item.id} value={item.id}>{formatDate(item.report_date)} · v{item.version || 1}{item.status === 'DRAFT' ? ' · Brouillon' : ''}</option>)}
         </select>
       </div>
       <SummaryCards report={report} reports={reports} onOpen={setView} />
@@ -401,15 +402,14 @@ function PerformanceRow({ icon: Icon, label, value, target, numerator, denominat
 }
 
 function HistoryCard({ reports, selected, onSelect }) {
-  const published = useMemo(() => reports.filter((r) => r.status === 'PUBLISHED'), [reports]);
   return (
     <article className="panel history-card">
       <header className="panel-header"><div><span>Historique</span><h2>Derniers rapports</h2></div><History size={20} /></header>
       <div className="history-list">
-        {published.map((item) => {
+        {reports.map((item) => {
           const s = summarizeReport(item);
           return <button key={item.id || `${item.report_date}-${item.version}`} className={item.id === selected.id ? 'active' : ''} onClick={() => onSelect(item)}>
-            <div><strong>{formatDate(item.report_date)}</strong><small>v{item.version || 1} · {formatNumber(s.productionQtx)} qtx production</small></div>
+            <div><strong>{formatDate(item.report_date)}</strong><small>v{item.version || 1} · {item.status === 'DRAFT' ? 'Brouillon' : 'Publié'} · {formatNumber(s.productionQtx)} qtx production</small></div>
             <span>{formatMoney(s.collectionsAmount)}</span><ChevronRight size={17} />
           </button>;
         })}
@@ -646,7 +646,7 @@ function ImportModal({ onClose, onPublish, publishing }) {
             <div className="preview-grid"><MiniKpi label="Production" value={`${formatNumber(summary.productionQtx)} qtx`}/><MiniKpi label="Blé reçu" value={`${formatNumber(summary.wheatReceivedQtx)} qtx`}/><MiniKpi label="CA ventes" value="Import PDF séparé"/><MiniKpi label="Encaissements" value={formatMoney(summary.collectionsAmount)}/></div>
             <label className="note-field">Observation analyste<textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Observation ou information importante pour le manager…" rows={4}/></label>
             {errors.length ? <div className="validation-errors"><strong>À corriger avant publication :</strong>{errors.map((error) => <span key={error}>• {error}</span>)}</div> : <div className="validation-ok"><CheckCircle2 size={18}/><span>Les données opérationnelles sont présentes. Importez ensuite le PDF CA ventes.</span></div>}
-            <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={publish} disabled={publishing || errors.length}>{publishing ? <><RefreshCw size={17} className="spin"/> Publication…</> : <><CheckCircle2 size={17}/> Valider & publier</>}</button></div>
+            <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={publish} disabled={publishing || errors.length}>{publishing ? <><RefreshCw size={17} className="spin"/> Enregistrement…</> : <><CheckCircle2 size={17}/> Enregistrer le brouillon</>}</button></div>
           </>
         )}
         <input ref={inputRef} type="file" accept=".xlsx,.xls,.json" hidden onChange={(e) => readFile(e.target.files?.[0])}/>
@@ -688,7 +688,7 @@ function SalesPdfModal({ onClose, onPublish, publishing }) {
       <div className="preview-grid"><MiniKpi label="CA total PDF" value={formatMoney(total)}/><MiniKpi label="Journées" value={dayCount}/><MiniKpi label="Livraisons" value={parsed.transactions.length}/><MiniKpi label="Clients" value={clientCount}/></div>
       <div className="validation-ok"><CheckCircle2 size={18}/><span>Les montants HT, dates, références et clients ont été détectés. Les anciennes ventes des mêmes dates seront remplacées.</span></div>
       <div className="pdf-preview"><strong>Aperçu des dernières livraisons</strong>{parsed.transactions.slice(-5).reverse().map((row, index) => <div key={`${row.reference}-${index}`}><span>{formatDate(row.date)} · {row.client}</span><b>{formatMoney(row.montant_da)}</b></div>)}</div>
-      <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={() => onPublish(parsed)} disabled={publishing}>{publishing ? <><RefreshCw size={17} className="spin"/> Importation…</> : <><CheckCircle2 size={17}/> Remplacer le CA ventes</>}</button></div>
+      <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={() => onPublish(parsed)} disabled={publishing}>{publishing ? <><RefreshCw size={17} className="spin"/> Importation…</> : <><CheckCircle2 size={17}/> Mettre à jour le brouillon</>}</button></div>
     </>}
     {error && <div className="validation-errors">{error}</div>}
     <input ref={inputRef} type="file" accept="application/pdf,.pdf" hidden onChange={(event) => readFile(event.target.files?.[0])}/>
@@ -724,7 +724,7 @@ function BalanceImportModal({ onClose, onPublish, publishing }) {
       <div className="preview-grid"><MiniKpi label="Solde antérieur" value={formatMoney(parsed.totals.opening)}/><MiniKpi label="Chiffre d'affaires" value={formatMoney(parsed.totals.sales)}/><MiniKpi label="Paiements" value={formatMoney(parsed.totals.payments)}/><MiniKpi label="Nouveau solde" value={formatMoney(parsed.totals.closing)}/></div>
       {!parsed.isDaily && <div className="validation-errors"><strong>Balance de période détectée</strong><span>Elle sera enregistrée comme une seule situation au {formatDate(parsed.periodEnd)}. Pour connaître les encaissements jour par jour, exportez une balance avec « Du » et « Au » sur la même date.</span></div>}
       {parsed.isDaily && <div className="validation-ok"><CheckCircle2 size={18}/><span>Balance journalière détectée. Les encaissements et soldes clients du {formatDate(parsed.periodEnd)} remplaceront ceux déjà enregistrés ce jour.</span></div>}
-      <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={() => onPublish(parsed)} disabled={publishing}>{publishing ? <><RefreshCw size={17} className="spin"/> Importation…</> : <><CheckCircle2 size={17}/> Importer la balance</>}</button></div>
+      <div className="modal-actions"><button className="secondary" onClick={onClose}>Annuler</button><button className="primary" onClick={() => onPublish(parsed)} disabled={publishing}>{publishing ? <><RefreshCw size={17} className="spin"/> Importation…</> : <><CheckCircle2 size={17}/> Mettre à jour le brouillon</>}</button></div>
     </>}
     {error && <div className="validation-errors">{error}</div>}
     <input ref={inputRef} type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(event) => readFile(event.target.files?.[0])}/>
@@ -805,19 +805,20 @@ function App() {
       });
       if (cloudEnabled) {
         for (const item of importedReports) {
-          published = await cloudPublishReport({ ...item, note: item.report_date === draft.report_date ? draft.note : item.note }, session.user.id);
+          published = await cloudSaveDraft({ ...item, note: item.report_date === draft.report_date ? draft.note : item.note }, session.user.id);
         }
         await refreshReports();
       } else {
         const created = importedReports.map((item, index) => {
+          const existingDraft = reports.find((existing) => existing.report_date === item.report_date && existing.status === 'DRAFT');
           const sameDateVersions = reports.filter((existing) => existing.report_date === item.report_date).map((existing) => Number(existing.version || 0));
-          const version = Math.max(0, ...sameDateVersions) + 1;
+          const version = existingDraft?.version || Math.max(0, ...sameDateVersions) + 1;
           const { historical_reports, ...cleanItem } = item;
-          return { ...cleanItem, note: item.report_date === draft.report_date ? draft.note : item.note, id: `local-${item.report_date}-v${version}-${Date.now()}-${index}`, version, status: 'PUBLISHED', published_at: new Date().toISOString(), created_at: new Date().toISOString() };
+          return { ...cleanItem, note: item.report_date === draft.report_date ? draft.note : item.note, id: existingDraft?.id || `local-${item.report_date}-v${version}-${Date.now()}-${index}`, version, status: 'DRAFT', published_at: null, created_at: existingDraft?.created_at || new Date().toISOString() };
         });
         published = created.at(-1);
         const importedDates = new Set(created.map((item) => item.report_date));
-        const next = [...created, ...reports.filter((item) => !importedDates.has(item.report_date))]
+        const next = [...created, ...reports.filter((item) => !(importedDates.has(item.report_date) && item.status === 'DRAFT'))]
           .sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
         saveLocalReports(next);
         setReports(next);
@@ -825,7 +826,7 @@ function App() {
       setSelectedId(published.id);
       setView('home');
       setImportOpen(false);
-      notify(`Rapport du ${formatDate(published.report_date)} publié avec succès.`, 'success');
+      notify(`Rapport du ${formatDate(published.report_date)} enregistré comme brouillon.`, 'success');
     } catch (err) {
       notify(err.message || 'Publication impossible.', 'error');
     } finally {
@@ -855,16 +856,17 @@ function App() {
 
       let published;
       if (cloudEnabled) {
-        for (const item of mergedReports) published = await cloudPublishReport(item, session.user.id);
+        for (const item of mergedReports) published = await cloudSaveDraft(item, session.user.id);
         await refreshReports();
       } else {
         const importedDates = new Set(mergedReports.map((item) => item.report_date));
         const created = mergedReports.map((item, index) => {
+          const existingDraft = reports.find((row) => row.report_date === item.report_date && row.status === 'DRAFT');
           const previousVersions = reports.filter((row) => row.report_date === item.report_date).map((row) => Number(row.version || 0));
-          const version = Math.max(0, ...previousVersions) + 1;
-          return { ...item, id: `local-ca-${item.report_date}-${Date.now()}-${index}`, version, status: 'PUBLISHED', published_at: new Date().toISOString(), created_at: new Date().toISOString() };
+          const version = existingDraft?.version || Math.max(0, ...previousVersions) + 1;
+          return { ...item, id: existingDraft?.id || `local-ca-${item.report_date}-${Date.now()}-${index}`, version, status: 'DRAFT', published_at: null, created_at: existingDraft?.created_at || new Date().toISOString() };
         });
-        const next = [...created, ...reports.filter((item) => !importedDates.has(item.report_date))]
+        const next = [...created, ...reports.filter((item) => !(importedDates.has(item.report_date) && item.status === 'DRAFT'))]
           .sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
         saveLocalReports(next);
         setReports(next);
@@ -907,13 +909,14 @@ function App() {
 
       let published;
       if (cloudEnabled) {
-        published = await cloudPublishReport(merged, session.user.id);
+        published = await cloudSaveDraft(merged, session.user.id);
         await refreshReports();
       } else {
+        const existingDraft = reports.find((row) => row.report_date === date && row.status === 'DRAFT');
         const previousVersions = reports.filter((row) => row.report_date === date).map((row) => Number(row.version || 0));
-        const version = Math.max(0, ...previousVersions) + 1;
-        published = { ...merged, id: `local-balance-${date}-${Date.now()}`, version, status: 'PUBLISHED', published_at: new Date().toISOString(), created_at: new Date().toISOString() };
-        const next = [published, ...reports.filter((item) => item.report_date !== date)]
+        const version = existingDraft?.version || Math.max(0, ...previousVersions) + 1;
+        published = { ...merged, id: existingDraft?.id || `local-balance-${date}-${Date.now()}`, version, status: 'DRAFT', published_at: null, created_at: existingDraft?.created_at || new Date().toISOString() };
+        const next = [published, ...reports.filter((item) => !(item.report_date === date && item.status === 'DRAFT'))]
           .sort((a, b) => `${b.report_date}-${b.version}`.localeCompare(`${a.report_date}-${a.version}`));
         saveLocalReports(next);
         setReports(next);
@@ -924,6 +927,30 @@ function App() {
       notify(`Balance clients du ${formatDate(date)} importée : ${formatMoney(balance.totals.payments)} encaissés.`, 'success');
     } catch (err) {
       notify(err.message || 'Importation de la balance clients impossible.', 'error');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const approveReport = async () => {
+    const draft = reports.find((item) => item.id === selectedId) || reports.find((item) => item.id === selected?.id);
+    if (!draft || draft.status !== 'DRAFT') return;
+    setPublishing(true);
+    try {
+      let approved;
+      if (cloudEnabled) {
+        approved = await cloudApproveReport(draft.id);
+        await refreshReports();
+      } else {
+        approved = { ...draft, status: 'PUBLISHED', published_at: new Date().toISOString() };
+        const next = reports.map((item) => item.id === draft.id ? approved : item);
+        saveLocalReports(next);
+        setReports(next);
+      }
+      setSelectedId(approved.id);
+      notify(`Rapport du ${formatDate(approved.report_date)} publié au compte manager.`, 'success');
+    } catch (err) {
+      notify(err.message || 'Publication au manager impossible.', 'error');
     } finally {
       setPublishing(false);
     }
@@ -955,13 +982,13 @@ function App() {
   const selected = scopedReports.find((item) => item.id === selectedId) || scopedReports[0];
 
   if (!selected) {
-    return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onClear={clearAllData}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} {salesPdfOpen && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>} {balanceOpen && <BalanceImportModal onClose={() => setBalanceOpen(false)} onPublish={publishClientBalance} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
+    return <div className="app-shell"><Header session={session} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onApprove={approveReport} onClear={clearAllData}/><main className="app-main empty-main"><FileSpreadsheet size={46}/><h2>Aucun rapport publié</h2><p>Importez le premier rapport journalier validé.</p>{session.profile.role === 'ANALYST' && <button className="primary" onClick={() => setImportOpen(true)}><Upload size={17}/> Importer</button>}</main>{importOpen && <ImportModal onClose={() => setImportOpen(false)} onPublish={publishReport} publishing={publishing}/>} {salesPdfOpen && <SalesPdfModal onClose={() => setSalesPdfOpen(false)} onPublish={publishSalesPdf} publishing={publishing}/>} {balanceOpen && <BalanceImportModal onClose={() => setBalanceOpen(false)} onPublish={publishClientBalance} publishing={publishing}/>}<Toast toast={toast} onClose={() => setToast(null)}/></div>;
   }
 
   const setReport = (report) => { setSelectedId(report.id); setView('home'); };
   return (
     <div className="app-shell">
-      <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onClear={clearAllData} />
+      <Header session={session} report={selected} onLogout={logout} onImport={() => setImportOpen(true)} onImportSales={() => setSalesPdfOpen(true)} onImportBalance={() => setBalanceOpen(true)} onApprove={approveReport} onClear={clearAllData} />
       <main className="app-main" key={`${view}-${selected.id}`}>
         <ClientSlicer value={clientScope} onChange={setClientScope} />
         {view === 'home' && <HomeView report={selected} setView={setView} reports={scopedReports} onSelectReport={setReport} role={session.profile.role} onImport={() => setImportOpen(true)} />}

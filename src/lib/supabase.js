@@ -58,6 +58,61 @@ export async function cloudLoadReports() {
   return (data || []).map(mapDbReport);
 }
 
+const reportPayload = (report, userId, status, version) => ({
+  report_date: report.report_date,
+  version,
+  status,
+  note: report.note || '',
+  source_file: report.source_file || '',
+  production: report.production || [],
+  wheat: report.wheat || [],
+  sales: report.sales || [],
+  collections: report.collections || [],
+  created_by: userId,
+  published_at: status === 'PUBLISHED' ? new Date().toISOString() : null,
+});
+
+export async function cloudSaveDraft(report, userId) {
+  const { data: latest, error: latestError } = await supabase
+    .from('daily_reports')
+    .select('*')
+    .eq('report_date', report.report_date)
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latestError) throw latestError;
+
+  if (latest?.status === 'DRAFT') {
+    const { data, error } = await supabase.from('daily_reports')
+      .update(reportPayload(report, userId, 'DRAFT', latest.version))
+      .eq('id', latest.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapDbReport(data);
+  }
+
+  const version = (latest?.version || 0) + 1;
+  const { data, error } = await supabase
+    .from('daily_reports')
+    .insert(reportPayload(report, userId, 'DRAFT', version))
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapDbReport(data);
+}
+
+export async function cloudApproveReport(reportId) {
+  const { data, error } = await supabase
+    .from('daily_reports')
+    .update({ status: 'PUBLISHED', published_at: new Date().toISOString() })
+    .eq('id', reportId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapDbReport(data);
+}
+
 export async function cloudPublishReport(report, userId) {
   const { data: versions, error: versionError } = await supabase
     .from('daily_reports')
